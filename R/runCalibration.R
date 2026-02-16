@@ -1,5 +1,5 @@
 ############################################################
-## Generic calibration engine (backend-agnostic)
+## Generic calibration engine
 ############################################################
 
 #' Run posterior predictive calibration

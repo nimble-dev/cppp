@@ -162,8 +162,7 @@ runCalibrationNIMBLE <- function(
   observedData <- cmodel[[dataNames]]
 
   ## -------------------------------------------------------------------------------------------- ##
-  ## SP - this needs some checking
-
+  ## some messages for checks
   if (verbose) {
     message("modifiying the control for runCalibration:")
     message("  mcmc fields: ", paste(names(control$mcmc), collapse = ", "))
@@ -186,9 +185,8 @@ runCalibrationNIMBLE <- function(
   ## -------------------------------------------------------------------------------------------- ##
   ## SP - NEW at 20260202: Set up for parallelization
   ## -------------------------------------------------------------------------------------------- ##
-  parallelControl <- control$parallel
-  workers <- if (is.list(parallelControl) && !is.null(parallelControl$workers)) {
-    as.integer(parallelControl$workers)
+  workers <- if (is.list(control$parallel) && !is.null(control$parallel$workers)) {
+    as.integer(control$parallel$workers)
   } else 1L
   useParallel <- !is.na(workers) && workers > 1L
 
