@@ -138,7 +138,7 @@ runCalibration <- function(
     stop("drawIndexSelector must return exactly nReps indices.")
   }
 
-  ## Set up parallelization
+  ## Check if parellization is set up
   parallelControl <- control$parallel
   workers <- if (is.list(parallelControl) && !is.null(parallelControl$workers)) {
     as.integer(parallelControl$workers)
@@ -207,7 +207,7 @@ runCalibration <- function(
 
   ## PARALLELIZATION
   if (!useParallel) {
-
+    ## no paraellelization - use the runOneRep serially
     for (r in seq_len(nReps)) {
       out <- runOneRep(r)
       repPPP[r] <- out$ppp
@@ -216,23 +216,93 @@ runCalibration <- function(
 
   } else {
 
+    ## start workers (R sessions)
     cl <- parallel::makeCluster(workers)
     on.exit(parallel::stopCluster(cl), add = TRUE)
 
-    ## ---- PSOCK setup: load packages and export extra objects  ----
+    ## check the list
     parallelControl <- if (is.list(parallelControl)) parallelControl else list()
 
+    ## this runs a function for each worker to load packages
     pkgsToLoad <- parallelControl$packages
     if (!is.null(pkgsToLoad)) {
       pkgsToLoad <- as.character(pkgsToLoad)
-      parallel::clusterEvalQ(cl, {
-        for (p in pkgsToLoad) {
+      parallel::clusterCall(cl, function(pkgs) {
+        for (p in pkgs) {
+          ## SP: not sure about the difference between require and requireNamespace
+          if (!requireNamespace(p, character.only = TRUE)) {
+            stop(sprintf("Failed to load package '%s' on worker.", p))
+          }
+        }
+        NULL
+      }, pkgsToLoad)
+    }
+
+    ## deal with any other user-defiend function to export
+    extraExport <- parallelControl$export
+    if (!is.null(extraExport)) {
+      extraExport <- as.character(extraExport)
+    } else {
+      extraExport <- character(0)
+    }
+
+    ## export everything the workers need
+    parallel::clusterExport(
+      cl,
+      varlist = unique(c(
+        "repSeeds", "discControl", "mcmcControl",
+        "simulateNewDataFun", "MCMCFun", "discFun", "runOneRep",
+        extraExport
+      )),
+      envir = environment()
+    )
+
+    ## To make runCalibrationNIMBLE work
+    ## one-time worker initialization (optional)
+    if (is.list(parallelControl) && is.function(parallelControl$init)) {
+      parallel::clusterCall(cl, parallelControl$init)
+    }
+
+    # after clusterCall(...)
+    ok <- unlist(parallel::clusterEvalQ(cl, exists("workerCtx", envir = .GlobalEnv)))
+
+    if (!all(ok)) {
+      errs <- parallel::clusterEvalQ(cl, {
+        if (exists("workerCtx_init_error", envir = .GlobalEnv)) {
+          workerCtx_init_error
+        } else {
+          NULL
+        }
+      })
+
+      stop(
+        "PSOCK init did not create workerCtx on all workers.\n",
+        paste0("Worker init errors:\n",
+               paste(vapply(errs, function(e) {
+                 if (is.null(e)) "NULL" else conditionMessage(e)
+               }, character(1)), collapse = "\n"))
+      )
+
+      if (!is.null(seed)) {
+        parallel::clusterSetRNGStream(cl, iseed = seed)
+      }
+
+      outs <- parallel::parLapply(cl, X = seq_len(nReps), fun = runOneRep)
+
+      repPPP <- vapply(outs, function(z) z$ppp, numeric(1))
+      repDiscList <- lapply(outs, function(z) z$disc)
+    }
+    pkgsToLoad <- parallelControl$packages
+    if (!is.null(pkgsToLoad)) {
+      pkgsToLoad <- as.character(pkgsToLoad)
+      parallel::clusterCall(cl, function(pkgs) {
+        for (p in pkgs) {
           if (!require(p, character.only = TRUE)) {
             stop(sprintf("Failed to load package '%s' on worker.", p))
           }
         }
         NULL
-      })
+      }, pkgsToLoad)
     }
 
     extraExport <- parallelControl$export
@@ -259,8 +329,26 @@ runCalibration <- function(
       parallel::clusterCall(cl, parallelControl$init)
     }
 
+    # some checks
     ok <- unlist(parallel::clusterEvalQ(cl, exists("workerCtx", envir = .GlobalEnv)))
-    if (!all(ok)) stop("PSOCK init ran, but workerCtx was not created on all workers.")
+
+    if (!all(ok)) {
+      errs <- parallel::clusterEvalQ(cl, {
+        if (exists("workerCtx_init_error", envir = .GlobalEnv)) {
+          workerCtx_init_error
+        } else {
+          NULL
+        }
+      })
+
+      stop(
+        "PSOCK init did not create workerCtx on all workers.\n",
+        paste0("Worker init errors:\n",
+               paste(vapply(errs, function(e) {
+                 if (is.null(e)) "NULL" else conditionMessage(e)
+               }, character(1)), collapse = "\n"))
+      )
+    }
 
     if (!is.null(seed)) {
       parallel::clusterSetRNGStream(cl, iseed = seed)
