@@ -17,43 +17,91 @@ runCalibration(
 )
 }
 \arguments{
-\item{MCMCSamples}{Matrix of posterior draws from the observed-data fit.}
+\item{MCMCSamples}{Matrix of posterior draws from the observed-data fit.
+Each row corresponds to one posterior draw of the model parameters.}
 
-\item{observedData}{Observed dataset (any R object).}
+\item{observedData}{Observed dataset. This dataset is treated
+as the conditioning data for the initial discrepancy calculation.}
 
-\item{MCMCFun}{Function \verb{function(targetData, control)} that runs a short MCMC conditional on \code{targetData}and returns posterior samples. \code{targetData} is the dataset treated as observed for the MCMC run.}
+\item{MCMCFun}{Function defined as
+\verb{function(targetData, control)} that runs an MCMC algorithm conditional on
+\code{targetData} and returns posterior samples as a matrix.}
 
-\item{simulateNewDataFun}{Function \verb{function(thetaRow, control)} that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.}
+\item{simulateNewDataFun}{Function defined as
+\verb{function(thetaRow, control)} that simulates one replicated dataset
+from the posterior predictive distribution given a single posterior
+draw \code{thetaRow}.}
 
-\item{discFun}{Function \verb{function(MCMCSamples, targetData, control)} that returns a list with components \code{obs} and \code{sim}, each a numeric vector over posterior draws. \code{targetData} is the dataset treated as observed for the discrepancy calculation.}
+\item{discFun}{Discrepancy extractor with signature
+\verb{function(MCMCSamples, targetData, control)} returning a list with
+components \code{obs} and \code{sim}, each a numeric vector (one value per row of
+\code{MCMCSamples}).
 
-\item{nReps}{Number of calibration replications.}
-
-\item{drawIndexSelector}{Optional function \verb{function(MCMCSamples, nReps, control)}
-returning the indices of rows to use as seeds for calibration.}
-
-\item{control}{Optional list of specific arguments passed to the
-components used by \code{runCalibration()}. For convenience, \code{control} may be
-a flat list, in which case it is passed unchanged to all components.
-
-Alternatively, \code{control} may be a structured list with named sublists,
-which are routed to different stages of the calibration:
+In typical use, \code{discFun} is created by one of the package helpers:
 \describe{
-\item{mcmc}{Arguments or objects passed to \code{MCMCFun}, typically used
-to control short MCMC runs in replicated calibration worlds.}
-\item{disc}{Arguments or objects passed to \code{simulateNewDataFun} and
-\code{discFun}, typically used for data simulation and discrepancy
-calculation (e.g., model objects, node names).}
-\item{draw}{Arguments passed to \code{drawIndexSelector}, if provided.}
+\item{\code{makeOfflineDiscFun()}}{Computes discrepancies by evaluating a
+user-specified discrepancy \eqn{D(data, \theta)} on \code{targetData} and on
+posterior predictive replicates simulated for each posterior draw.}
+\item{\code{makeColDiscFun()}}{Extracts precomputed discrepancy columns
+from \code{MCMCSamples} (online mode), returning them as \code{obs} and \code{sim}.}
 }
 
-This structure allows backend-specific state (such as NIMBLE models
-and compiled MCMC objects) to be cleanly separated while remaining
-backward compatible with simpler uses.#' @param ... Not used currently.}
+Custom \code{discFun} functions are also supported, as long as the return value
+has named components \code{obs} and \code{sim} of equal length.}
+
+\item{nReps}{Integer. Number of calibration replicates.}
+
+\item{drawIndexSelector}{Optional function
+\verb{function(MCMCSamples, nReps, control)} returning a vector of row indices
+selecting which posterior draws are used as seeds for calibration worlds.
+If \code{NULL}, indices are chosen evenly over the posterior sample.}
+
+\item{control}{Optional list of arguments passed to components used by
+\code{runCalibration()}.
+
+For convenience, \code{control} may be a flat list, in which case it is passed
+unchanged to all components.
+
+Alternatively, \code{control} may be a structured list with named sublists:
+\describe{
+\item{mcmc}{Arguments passed to \code{MCMCFun}, typically controlling short
+MCMC runs in replicated calibration worlds (e.g., \code{niter}, \code{nburnin}).}
+\item{disc}{Arguments passed to \code{simulateNewDataFun} and \code{discFun},
+typically including model objects, data node names, or parameter names.}
+\item{draw}{Arguments passed to \code{drawIndexSelector}, if provided.}
+\item{parallel}{Optional list controlling parallel execution of
+replicated calibration worlds. Supported fields:
+\describe{
+\item{workers}{Integer number of PSOCK workers. Default is 1 (serial).}
+\item{seed}{Optional integer seed for reproducible parallel RNG.}
+\item{export}{Optional character vector of object names (e.g. helper functions) to export to workers.}
+\item{packages}{Optional character vector of packages to load on workers.}
+}}
+}}
+
+\item{...}{Not used currently.}
 }
 \value{
-a list (future \code{S3} class \code{cpppResult} objects) containing the CPPP, observed and replicated repPPP, observed discrepancies and replicated discrepancies.
+An object of class \code{cpppResult} containing:
+\describe{
+\item{CPPP}{Calibrated posterior predictive p-value.}
+\item{obsPPP}{Posterior predictive p-value for the observed data.}
+\item{repPPP}{Vector of posterior predictive p-values for each
+calibration world.}
+\item{discrepancies}{List containing observed and replicated discrepancies.}
+\item{drawnIndices}{Indices of posterior draws used as calibration seeds.}
+}
 }
 \description{
-Run posterior predictive calibration
+Computes a calibrated posterior predictive p-value (CPPP) using
+posterior predictive checks and replicated calibration worlds.
+}
+\details{
+The function is backend-agnostic: model fitting, data simulation,
+and discrepancy evaluation are provided by user-supplied functions.
+
+Calibration replicates are conditionally independent given the
+posterior sample and may be executed in parallel using PSOCK clusters.
+Objects referenced by \code{MCMCFun}, \code{discFun}, and \code{simulateNewDataFun} must
+be serializable and available on worker processes.
 }

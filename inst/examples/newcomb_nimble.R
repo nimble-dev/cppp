@@ -4,10 +4,10 @@
 
 ## 1) Packages
 library(nimble)
-library(cppp)
+library(cpppPrototype)
 
 ## 2) Data: Newcomb light-speed measurements
-lightPath <- system.file("examples", "light.txt", package = "cppp")
+lightPath <- system.file("examples", "light.txt", package = "cpppPrototype")
 newcombData <- list(y = read.table(lightPath)$V1)
 
 constants <- list(n = length(newcombData$y))
@@ -79,7 +79,6 @@ samples <- nimbleMCMC(
   nburnin = 1000,
   monitors = paramNames
 )
-str(samples)
 MCMCSamples <- as.matrix(samples)
 head(MCMCSamples)
 
@@ -145,16 +144,43 @@ print(resNewcomb$repPPP)
 # abline()
 ############################
 
-#
-# ##  Check discFun on the original (real) data
-# disc <- discFun(
-#   MCMCSamples = MCMCSamples,
-#   targetData  = newcombData$y,
-#   control     = control
-# )
-# plot(disc$obs, disc$sim,
-#      xlab = "D(y, θ)",
-#      ylab = "D(y*, θ)")
-# abline(0, 1)
-#
-# mean(disc$sim >= disc$obs)
+controlParallel <- control
+controlParallel$parallel <- list(
+  workers  = 2,
+  seed     = 1,
+  packages = c("nimble", "cpppPrototype")  # include your package so helpers exist on workers
+)
+
+## Test 2: parallel, provide MCMCSamples (skips main MCMC)
+resNewcomb_par2 <- runCalibrationNIMBLE(
+  model             = newcomb_model$newModel(replicate = TRUE),
+  dataNames         = dataNames,
+  paramNames        = paramNames,
+  MCMCSamples       = MCMCSamples,
+  discFun           = discFun,
+  simulateNewDataFun= newcombNewData,
+  nReps             = 10,
+  MCMCcontrolRep    = list(niter = 100,  nburnin = 0,    thin = 1),
+  control           = controlParallel
+)
+
+print(resNewcomb_par2$CPPP)
+print(resNewcomb_par2$repPPP)
+
+## Test 1: parallel, run main MCMC inside runCalibrationNIMBLE
+resNewcomb_par1 <- runCalibrationNIMBLE(
+  model             = newcomb_model$newModel(replicate = TRUE),
+  dataNames         = dataNames,
+  paramNames        = paramNames,
+  discFun           = discFun,
+  simulateNewDataFun= newcombNewData,
+  nReps             = 10,
+  MCMCcontrolMain   = list(niter = 5000, nburnin = 1000, thin = 1),
+  MCMCcontrolRep    = list(niter = 100,  nburnin = 0,    thin = 1),
+  control           = controlParallel
+)
+
+print(resNewcomb_par1$CPPP)
+print(resNewcomb_par1$repPPP)
+
+

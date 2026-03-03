@@ -1,11 +1,11 @@
 ############################################################
 ## Newcomb example in pure R (no NIMBLE)
-## Uses: runCalibration() + makeOfflineDiscFun() from cppp
+## Uses: runCalibration() + makeOfflineDiscFun() from cpppPrototype
 ############################################################
-library(cppp)
+library(cpppPrototype)
 
 ## 1) Data
-lightPath <- system.file("examples", "light.txt", package = "cppp")
+lightPath <- system.file("examples", "light.txt", package = "cpppPrototype")
 
 yObs <- read.table(lightPath)$V1
 n <- length(yObs)
@@ -65,14 +65,21 @@ discFun <- makeOfflineDiscFun(discConfig)
 ## Use structured control so routing is exercised:
 control <- list(
   verbose = TRUE,
-  mcmc = list(nDraws = 100),    # size of each posterior sample used in discFun + refits
+  mcmc = list(nDraws = 1000),    # size of each posterior sample used in discFun + refits
   disc = list(n = n)            # used by simulateNewDataFun + discrepancy (if needed)
 )
 
 set.seed(1)
 
 ## main posterior draws from observed data
-MCMCSamples <- samplePosteriorNormalJeffreys(yObs, nDraws = control$mcmc$nDraws)
+MCMCSamples <- samplePosteriorNormalJeffreys(yObs, nDraws = 5000)
+
+## manual "burn-in"
+nburnin <- 1000  # set to e.g. 100 if you want
+if (nburnin > 0L) {
+  if (nburnin >= nrow(MCMCSamples)) stop("nburnin must be < number of draws.")
+  MCMCSamples <- MCMCSamples[-seq_len(nburnin), , drop = FALSE]
+}
 
 res <- runCalibration(
   MCMCSamples        = MCMCSamples,
@@ -92,3 +99,30 @@ print(res$obsPPP)
 ## Optional quick look at observed discrepancies
 ## obsDisc <- res$discrepancies$obs
 ## plot(obsDisc$obs, obsDisc$sim); abline(0,1)
+
+###########
+## Test parallel
+control$parallel <- list(
+  workers  = 5,
+  seed     = 1,
+  export   = c("samplePosteriorNormalJeffreys"),
+  packages = c()  # or c("nimble") later
+)
+res <- runCalibration(
+  MCMCSamples        = MCMCSamples,
+  observedData       = yObs,
+  MCMCFun            = MCMCFun,
+  simulateNewDataFun = simulateNewDataFun,
+  discFun            = discFun,
+  nReps              = 1000,
+  drawIndexSelector  = NULL,
+  control            = control
+)
+
+print(res$CPPP)
+
+print(res$CPPP - 0.055) ## compare with paper result
+## print(res$repPPP)
+print(res$obsPPP - 0.208) ## compare with paper result
+
+## SP note - a better check would assess if differences can be explaoned by monte carlo variability

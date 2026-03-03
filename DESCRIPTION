@@ -1,12 +1,13 @@
-Package: cppp
+Package: cpppPrototype
 Title: Posterior Predictive Checks and Calibrated P-values
 Version: 0.0.0.9000
 Authors@R: 
     c(
       person("Sally", "Paganin", email = "paganin.1@osu.edu",
              role = c("aut", "cre")),
-      person("Perry", "de Valpine", role = "aut") 
-      )
+      person("Perry", "de Valpine", role = "aut"),
+      person("Daniel", "Turek", role = "aut")
+    )
 Maintainer: Sally Paganin <paganin.1@osu.edu>
 Description: Tools for performing posterior predictive checks and computing 
     calibrated posterior predictive p-values (cPPP) in Bayesian models. 

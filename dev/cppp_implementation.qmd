@@ -1,0 +1,79 @@
+---
+title: "Notes about the CPPP package implementation"
+format: html
+editor: source
+---
+
+This package that handles the cppp computation, able to interface with nimble and R (user written functions)
+
+This procedure uses Monte Carlo approximation at two different levels. 
+
+a. Approximate the PPP - this is a byproduct of an mcmc algorithm 
+
+b. Approximate the distribution of the PPP - this is application of parametric bootstrap where in each bootstrap replication (calibration replicate) we use approximation 1.
+
+The most delicate part now is to define the implementation of step a, possiby using the  "derived quantities" system.
+
+### Calculate the PPP
+
+<!-- Assume we have $m$ samples from the posterior preditive. Let $D(\cdot; \theta) The ppp is defined as  -->
+
+<!-- $$ -->
+<!-- \frac{1}{m} \sum_{i = 1}^m \mathbf{I}\{ D(y^{*}, \theta^{(i)}) \} -->
+<!-- $$ -->
+
+
+We could for example write a derived quantity nimbleFunction not just for predictive quantities but for discrepancy measures (of current and predictive simulated values) and/or differences in discrepancy measures. In discussion with Daniel earlier today, he suggested I write out what the steps would be. I think they would be roughly:
+
+- `theta`: as nodes sampled in MCMC that would be simulated for posterior predictive purposes. 
+- `omega` : nodes NOT sampled in MCMC that would be simulated for posterior predictive purposes. For example, Theta could include model parameters being estimated and/or DATA VALUES, while Omega could include purely predictive nodes, such as summations over latent states.
+Using the current Theta values in the model, simulate any Omega if necessary.
+Calculate the discrepancy measure. (This is the discrepancy for the observed data).
+Simulate any Theta and/or Omega.
+Calculate the discrepancy measure. (This is the discrepancy for the simulated data).
+Calculate the discrepancy difference.
+Record the two discrepancy measures and/or difference for output.
+Use the mvSaved to restore the model to its previous state, before simulating any Theta and/or Omega
+
+
+
+
+
+  - **Original design**: This use the nimble model as an object inside a workflow. A function `calcDiscrepancies` uses the compiled nimble model to sample from posterior predictive (overwriting the data); with the new data from the posterior predictive, a discrepancy is caculated. Discrepancies are implemented as `nimbleFunctions` including a certain `nimbleVirtualFunction`
+
+**Other options** 
+
+  - **Option 2 -**  Posterior predictive quantities and discrepancy calculations are defined in the model code  
+  - **Option 3**: Daniel's "derived quantities" system that allows to implement calculations based on MCMC samples.
+    - Calculations done after MCMC burn-in
+    - Can be computed at specified intervals (default is every iteration)
+
+
+
+.
+
+
+#### Definition of the discrepancy
+
+A "discrepancy" is a function of the data, and optionally of the model parameters. 
+
+- We need to save the entire mcmc chain of discrepancies calculated using the original data (for variance estimation)
+
+### Calibration - calcCPPP
+
+In the calibration part generate new datasets from the reference distribution (the model posterior predictive) and repeat the PPP computaiton $r$ times.
+
+1. Simulate replicated data from the posterior predictive $y^{rep}$ 
+2. Use $y^{rep}$ observed data in computing the ppp
+
+**Considerations** 
+
+* Step 1 requires choosing which iterations of the original MCMC to use to simulate new data. Choice between random sampling, equispaced or user able to define this. 
+
+* It should be easy to add more replicates in different sessions
+
+* This function should handle parallel computation
+
+* We want to estimate the CPPP and also its variance. We can have a helper function that calculate the variance (3 different methods avaialable). 
+
+* Variace estimation can be used to defined automatic stopping rules (need to compute the variance every xxx replicates)

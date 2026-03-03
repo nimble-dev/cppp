@@ -5,18 +5,43 @@
 #'   nodes flagged as data in the model are used.
 #' @param paramNames Character vector of parameter node names to monitor. (SP: if NULL some default?)
 #' @param MCMCSamples Optional matrix of posterior draws from the observed-data fit.
+#'   Each row corresponds to one posterior draw of the model parameters and columns names should contains `paramNames`.
 #'   If provided, `runCalibrationNIMBLE()` skips the main MCMC run and uses these
-#'   draws as the posterior sample input to `runCalibration()`. The matrix must
-#'   contain columns named by `paramNames`.
+#'   draws as the posterior sample input to `runCalibration()`.
 #' @param discFun Function `function(MCMCSamples, targetData, control)` that returns `list(obs, sim)` with one discrepancy value per posterior draw of `MCMCSamples`.
 #' @param simulateNewDataFun Function `function(thetaRow, control)` that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.
-#' @param nReps Number of calibration replications.
 #' @param MCMCcontrolMain List with `niter`, `nburnin`, `thin` for main chain.
 #' @param MCMCcontrolRep List with `niter`, `nburnin`, `thin` for calibration chains.
 #' @param mcmcConfFun Optional function `function(model)` returning an MCMC configuration.
-#' @param drawIndexSelector Optional row selector (see runCalibration()).
-#' @param control List of additional options passed to discrepancy / helpers.
-#' @param ... Not used currently.
+#' @param nReps Integer. Number of calibration replicates.
+#'
+#' @param drawIndexSelector Optional function
+#'   `function(MCMCSamples, nReps, control)` returning a vector of row indices
+#'   selecting which posterior draws are used as seeds for calibration worlds.
+#'   If `NULL`, indices are chosen evenly over the posterior sample.
+#'
+#' @param control Optional list of arguments passed to components used by
+#'   `runCalibration()`.
+#'
+#'   For convenience, `control` may be a flat list, in which case it is passed
+#'   unchanged to all components.
+#'
+#'   Alternatively, `control` may be a structured list with named sublists:
+#'   \describe{
+#'     \item{mcmc}{Arguments passed to `MCMCFun`, typically controlling short
+#'       MCMC runs in replicated calibration worlds (e.g., `niter`, `nburnin`).}
+#'     \item{disc}{Arguments passed to `simulateNewDataFun` and `discFun`,
+#'       typically including model objects, data node names, or parameter names.}
+#'     \item{draw}{Arguments passed to `drawIndexSelector`, if provided.}
+#'     \item{parallel}{Optional list controlling parallel execution of
+#'       replicated calibration worlds. Supported fields:
+#'       \describe{
+#'         \item{workers}{Integer number of PSOCK workers. Default is 1 (serial).}
+#'         \item{seed}{Optional integer seed for reproducible parallel RNG.}
+#'         \item{export}{Optional character vector of object names (e.g. helper functions) to export to workers.}
+#'         \item{packages}{Optional character vector of packages to load on workers.}
+#'       }}
+#'   }#' @param ... Not used currently.
 #' @export
 
 runCalibrationNIMBLE <- function(
@@ -26,10 +51,10 @@ runCalibrationNIMBLE <- function(
     MCMCSamples  = NULL,
     discFun,
     simulateNewDataFun,
-    nReps       = 100,
     MCMCcontrolMain = list(niter = 5000, nburnin = 1000, thin = 1),
     MCMCcontrolRep  = list(niter = 500,  nburnin = 0,    thin = 1),
     mcmcConfFun = NULL,
+    nReps       = 100,
     drawIndexSelector = NULL,
     control = list(),
     ...
@@ -61,13 +86,18 @@ runCalibrationNIMBLE <- function(
     stop("Argument 'model' must be a nimbleModel or a compiled nimble model.")
   }
 
+  ## ensure we always have an R model for worker initialization
+  rModel <- if (inherits(model, "CmodelBaseClass")) model$getModel() else model
+
   if (verbose) {
     message("Data nodes: ", paste(dataNames, collapse = ", "))
     message("Model class: ", paste(class(model), collapse = "/"))
     message("Compiled model class: ", paste(class(cmodel), collapse = "/"))
   }
 
+  ## -------------------------------------------------------------------------------------------- ##
   ## 1. Obtain posterior draws from observed data (either run MCMC or use user-supplied samples)
+  ## -------------------------------------------------------------------------------------------- ##
   if (is.null(MCMCSamples)) {
 
     ## Configure and compile MCMC for main chain
@@ -76,9 +106,9 @@ runCalibrationNIMBLE <- function(
         configureMCMC(model, monitors = paramNames, print = FALSE)
       }
     }
-    mcmcConf       <- mcmcConfFun(model)
+    mcmcConf       <- mcmcConfFun(rModel)
     mcmcUncompiled <- buildMCMC(mcmcConf)
-    cmcmc          <- compileNimble(mcmcUncompiled, project = model, resetFunctions = TRUE)
+    cmcmc          <- compileNimble(mcmcUncompiled, project = rModel, resetFunctions = TRUE)
 
     ## Run main chain on observed data
     obsMCMC <- runMCMC(
@@ -122,31 +152,19 @@ runCalibrationNIMBLE <- function(
         configureMCMC(model, monitors = paramNames, print = FALSE)
       }
     }
-    mcmcConf       <- mcmcConfFun(model)
+    mcmcConf       <- mcmcConfFun(rModel)
     mcmcUncompiled <- buildMCMC(mcmcConf)
-    cmcmc          <- compileNimble(mcmcUncompiled, project = model, resetFunctions = TRUE)
+    cmcmc          <- compileNimble(mcmcUncompiled, project = rModel, resetFunctions = TRUE)
   }
 
   ## Extract observed data from the model
   ## SP: need to think better if data is a vector/matrix/array - something else?
   observedData <- cmodel[[dataNames]]
 
-
-  ## 4. Build MCMCFun for replicated datasets
-  ## SP: do we want a function makeMCMCfun for specific configurations?
-  MCMCFun <- function(targetData, control) {
-    cmodel[[dataNames]] <- targetData
-    repMCMC <- runMCMC(
-      cmcmc,
-      niter   = control$niter,
-      nburnin = control$nburnin,
-      thin    = control$thin
-    )
-    as.matrix(repMCMC)
-  }
-
+  ## -------------------------------------------------------------------------------------------- ##
+  ## some messages for checks
   if (verbose) {
-    message("modifint the control for runCalibration:")
+    message("modifiying the control for runCalibration:")
     message("  mcmc fields: ", paste(names(control$mcmc), collapse = ", "))
     message("  disc fields: ", paste(names(control$disc), collapse = ", "))
     message("  draw fields: ", paste(names(control$draw), collapse = ", "))
@@ -155,7 +173,7 @@ runCalibrationNIMBLE <- function(
   defaultControl <- list(
     mcmc = MCMCcontrolRep,
     disc = list(
-      model      = model,
+      model      = rModel,
       dataNames  = dataNames,
       paramNames = paramNames
     ),
@@ -163,6 +181,99 @@ runCalibrationNIMBLE <- function(
   )
 
   control <- modifyList(defaultControl, control)
+
+  ## -------------------------------------------------------------------------------------------- ##
+  ## SP - NEW at 20260202: Set up for parallelization
+  ## -------------------------------------------------------------------------------------------- ##
+  workers <- if (is.list(control$parallel) && !is.null(control$parallel$workers)) {
+    as.integer(control$parallel$workers)
+  } else 1L
+  useParallel <- !is.na(workers) && workers > 1L
+
+  if (useParallel) {
+    ## ensure nimble is loaded on workers
+    if (is.null(control$parallel$packages)) control$parallel$packages <- character(0)
+    control$parallel$packages <- unique(c(control$parallel$packages, "nimble"))
+
+    ## ensure needed objects/functions are exported to workers
+    if (is.null(control$parallel$export)) control$parallel$export <- character(0)
+    control$parallel$export <- unique(c(
+      control$parallel$export,
+      "rModel", "dataNames", "paramNames", "mcmcConfFun"
+    ))
+
+    ## function to initialize each worker: make a worker-local compiled context
+    control$parallel$init <- function() {
+      tryCatch({
+        workerCtx <- new.env(parent = emptyenv())
+        workerCtx$repModel  <- rModel$newModel(replicate = TRUE)
+        workerCtx$cRepModel <- nimble::compileNimble(workerCtx$repModel)
+
+        conf <- if (is.null(mcmcConfFun)) {
+          nimble::configureMCMC(workerCtx$repModel, monitors = paramNames, print = FALSE)
+        } else {
+          mcmcConfFun(workerCtx$repModel)
+        }
+        mcmcUncompiled <- nimble::buildMCMC(conf)
+        workerCtx$cRepMCMC <- nimble::compileNimble(mcmcUncompiled, project = workerCtx$repModel, resetFunctions = TRUE)
+
+        assign("workerCtx", workerCtx, envir = .GlobalEnv)
+        TRUE
+      }, error = function(e) {
+        assign("workerCtx_init_error", conditionMessage(e), envir = .GlobalEnv)
+        FALSE
+      })
+    }
+
+  }
+
+  ##### MCMFun
+
+  if (!useParallel) {
+
+    MCMCFun <- function(targetData, control) {
+      cmodel[[dataNames]] <- targetData
+      as.matrix(nimble::runMCMC(
+        cmcmc,
+        niter   = control$niter,
+        nburnin = control$nburnin,
+        thin    = control$thin
+      ))
+    }
+
+  } else {
+
+    MCMCFun <- function(targetData, control) {
+      ctx <- get("workerCtx", envir = .GlobalEnv)
+      ctx$cRepModel[[dataNames]] <- targetData
+      as.matrix(nimble::runMCMC(
+        ctx$cRepMCMC,
+        niter   = control$niter,
+        nburnin = control$nburnin,
+        thin    = control$thin
+      ))
+    }
+
+  }
+
+
+  if (useParallel) {
+    userSim  <- simulateNewDataFun
+    userDisc <- discFun
+
+    simulateNewDataFun <- function(thetaRow, control) {
+      ctx <- get("workerCtx", envir = .GlobalEnv)
+      control$model <- ctx$cRepModel   ## or ctx$repModel if user wants R model methods
+      userSim(thetaRow, control)
+    }
+
+    discFun <- function(MCMCSamples, targetData, control) {
+      ctx <- get("workerCtx", envir = .GlobalEnv)
+      control$model <- ctx$cRepModel
+      userDisc(MCMCSamples, targetData, control)
+    }
+  }
+
 
   ## 5. Call generic engine
   if (verbose) {
