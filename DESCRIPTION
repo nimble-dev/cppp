@@ -1,0 +1,32 @@
+Package: cppp
+Title: Posterior Predictive Checks and Calibrated P-values
+Version: 0.0.0.9000
+Authors@R: 
+    c(
+      person("Sally", "Paganin", email = "paganin.1@osu.edu",
+             role = c("aut", "cre")),
+      person("Perry", "de Valpine", role = "aut") 
+      )
+Maintainer: Sally Paganin <paganin.1@osu.edu>
+Description: Tools for performing posterior predictive checks and computing 
+    calibrated posterior predictive p-values (cPPP) in Bayesian models. 
+    Includes infrastructure for calibration loops, diagnostic summaries, and 
+    NIMBLE-based examples.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends:
+    R (>= 4.1)
+Imports:
+    methods,
+    stats,
+    nimble
+Suggests: 
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+URL: https://github.com/salleuska/cpppPrototype
+BugReports: https://github.com/salleuska/cpppPrototype/issues
+LazyData: false
