@@ -1,7 +1,6 @@
-# cpppPrototype
+# cppp
 
-This package implements the calibration procedure described in  
-*Computational Methods for Fast Bayesian Model Assessment via Calibrated Posterior p-values*.
+A package for Calibrated posterior predictive p-values.
 
 It provides a general framework for a MCMC engine—to:
 
@@ -28,7 +27,7 @@ This chain of $\Delta = \{ \Delta_i \}$ collects the observed discrepancies.
    - run short chains of length $\tilde{m} $ for $p(\theta \mid \tilde{y}_j)$,
    - compute short-run posterior-predictive p-values $\hat{p}_j$.
 
-3. Combine:
+3. Estimate the CPPP:
 
 $$
  \widehat{\text{cppp}}
@@ -55,8 +54,6 @@ $$
 |-----------|------|
 | `make_col_disc_fun()` | Returns a function that extracts an “online” discrepancy column. |
 | `make_offline_disc_fun()` | Returns a function that computes discrepancies “offline.” |
-| `compute_cppp()` | Computes cppp from $\hat p_{\text{obs}}$ and $\hat p_j$. |
-| `transfer_ess_variance()` | Estimates cppp variance via transfer ESS. |
 
 Other possible helpers? 
 
@@ -64,6 +61,8 @@ Other possible helpers?
 |-----------|------|
 | `make_data_sim_fun()` | Returns a function that simulates new datasets $\tilde y$. |
 | `make_MCMCfun()` | ??  |
+| `compute_cppp()` | Computes cppp from $\hat p_{\text{obs}}$ and $\hat p_j$. |
+| `transfer_ess_variance()` | Estimates cppp variance via transfer ESS. |
 
 ### Data object
 
@@ -71,7 +70,7 @@ Other possible helpers?
 
   - cppp estimate, se, confidence interval
   - observed ppp, replicated ppp
-  - observed discrrepancies, replicated discrepancies (optional?)
+  - observed discrepancies, replicated discrepancies (optional?)
   - informations about the calibration procedure? number of replicates and mcmc per replicated
   - methods: `print`, `summary`, `plot`
 
@@ -97,64 +96,6 @@ Other possible helpers?
 5. **Compute cppp and variance**
    - `compute_cppp(p_hat_obs, p_hat_cal)`
    - `transfer_ess_variance(delta_chain, p_hat_obs, p_hat_cal, m_tilde)`
-
----
-
-<!--
-Algorithm
-**A. Run long chain**
-1. Run long MCMC -> $\Delta$  chain
-2. $\hat p_{\text{obs}} = M^{-1}\sum \mathbf{1}\{\Delta_i \le 0\}$
-
-**B. Calibration (r short runs)**
-For each replicate j:
-
-  - Simulate $\tilde y_j$
-  - Run short MCMC ($\tilde m_j$ iterations)
-  - Compute $\hat p_j = \tilde m_j^{-1}\sum \mathbf{1}\{\tilde\Delta_{j,t}\le0\}$
-
-**C. Estimate cppp**
-
-$$
-\widehat{\text{cppp}} = r^{-1}\sum_{j=1}^r
-  \mathbf{1}\{\hat p_j \le \hat p_{\text{obs}}\}.
-$$
-
-**D. Variance via transfer ESS**
-For each j:
-
-  1. Let $q_j=\hat p_j$.
-  2. Find threshold $q_j^{*}$ so empirical CDF of Δ at $q_j^*$= $q_j$.
-  3. Form indicator $Z_i^{(j)}=\mathbf{1}\{\Delta_i\le q_j^*\}$.
-  4. Estimate integrated autocorrelation $\tau_j$,
-  5. Transfer ESS $\widetilde{\text{ESS}}_j=\tilde m_j/\tilde\tau_j$.
-  6. $\widehat{\mathrm{Var}}(\hat{cppp})$
-
-
-**E. Variance via two-piece decomposition (paper formulation)**
-
-The cppp variance decomposes into two parts:
-
-$$
-\operatorname{Var}[\widehat{\text{cppp}}(y)]
-=
-\frac{1}{r}
-\,\mathbb{E}_Y
-\Big[
-  \operatorname{Var}_{K|Y}(
-    \mathbf{1}\{K \le \tilde m\,\widehat{\mathrm{ppp}}(y)\}\mid Y)
-\Big]
-+
-\operatorname{Var}_Y
-\Big[
-  \mathbb{E}_{K|Y}(
-    \mathbf{1}\{K \le \tilde m\,\widehat{\mathrm{ppp}}(y)\}\mid Y)
-\Big].
-$$
--->
-
-##   Future extensions
-- Support for other MCMC frameworks (`runCalibration_other()`).
 
 ---
 
