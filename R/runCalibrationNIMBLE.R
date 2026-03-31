@@ -38,6 +38,8 @@ runCalibrationNIMBLE <- function(
   verbose <- isTRUE(control$verbose)
 
   ## 0. Data names and checks
+
+  ## if dataNames is not provided, then use all nodes in the model that are data
   if (is.null(dataNames)) {
     dataNames <- model$getNodeNames(dataOnly = TRUE)
   }
@@ -62,7 +64,7 @@ runCalibrationNIMBLE <- function(
   }
 
   if (verbose) {
-    message("Data nodes: ", paste(dataNames, collapse = ", "))
+    message("Data nodes: ", paste(dataNodes, collapse = ", "))
     message("Model class: ", paste(class(model), collapse = "/"))
     message("Compiled model class: ", paste(class(cmodel), collapse = "/"))
   }
@@ -128,14 +130,17 @@ runCalibrationNIMBLE <- function(
   }
 
   ## Extract observed data from the model
-  ## SP: need to think better if data is a vector/matrix/array - something else?
-  observedData <- cmodel[[dataNames]]
-
+  ## SP: this extracts nodes to a named list
+  observedData <- values(cmodel, dataNodes)
 
   ## 4. Build MCMCFun for replicated datasets
-  ## SP: do we want a function makeMCMCfun for specific configurations?
   MCMCFun <- function(targetData, control) {
-    cmodel[[dataNames]] <- targetData
+    if (!is.numeric(targetData) || length(targetData) != length(dataNodes)) {
+      stop("targetData must be a numeric vector with one entry per data node.")
+    }
+
+    values(cmodel, dataNodes) <- targetData
+
     repMCMC <- runMCMC(
       cmcmc,
       niter   = control$niter,

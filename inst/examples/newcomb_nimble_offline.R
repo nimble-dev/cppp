@@ -160,10 +160,20 @@ print(resNewcomb$repPPP)
 # plot(obsDisc$obs, obsDisc$sim)
 # abline()
 ############################
-### check with more names
+### check when passing more than one dataName
 
 dataNames <- newcomb_model$expandNodeNames("y")
-
+resNewcomb <- runCalibrationNIMBLE(
+  model = newcomb_model$newModel(),
+  dataNames = dataNames,
+  paramNames = paramNames,
+  MCMCSamples = MCMCSamples,
+  discFun = discFun,
+  simulateNewDataFun = newcombNewData,
+  nReps = 10,
+  MCMCcontrolRep  = list(niter = 10,  nburnin = 0,    thin = 1),
+  control = control
+)
 
 
 #
