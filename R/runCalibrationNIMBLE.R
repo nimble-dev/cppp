@@ -3,11 +3,14 @@
 #' @param model either an uncompiled or compiled nimbleModel with observed data set.
 #' @param dataNames Optional character vector of data node names. If NULL,
 #'   nodes flagged as data in the model are used.
-#' @param paramNames Character vector of parameter node names to monitor. (SP: if NULL some default?)
+#' @param paramNames Optional character vector of parameter node names to monitor.
+#' If NULL, all stochastic non-data nodes in the model are used.
+
 #' @param MCMCSamples Optional matrix of posterior draws from the observed-data fit.
 #'   Each row corresponds to one posterior draw of the model parameters and columns names should contains `paramNames`.
 #'   If provided, `runCalibrationNIMBLE()` skips the main MCMC run and uses these
-#'   draws as the posterior sample input to `runCalibration()`.
+#'   draws as the posterior sample input to `runCalibration()`. The matrix must contain columns
+#'   corresponding to the expanded parameter nodes from `paramNames`.
 #' @param discFun Function `function(MCMCSamples, targetData, control)` that returns `list(obs, sim)` with one discrepancy value per posterior draw of `MCMCSamples`.
 #' @param simulateNewDataFun Function `function(thetaRow, control)` that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.
 #' @param MCMCcontrolMain List with `niter`, `nburnin`, `thin` for main chain.
@@ -47,7 +50,7 @@
 runCalibrationNIMBLE <- function(
     model,
     dataNames    = NULL,
-    paramNames,
+    paramNames   = NULL,
     MCMCSamples  = NULL,
     discFun,
     simulateNewDataFun,
@@ -63,6 +66,7 @@ runCalibrationNIMBLE <- function(
   verbose <- isTRUE(control$verbose)
 
   ## 0. Data names and checks
+  ## if dataNames is not provided, then use all nodes in the model that are data
   if (is.null(dataNames)) {
     dataNames <- model$getNodeNames(dataOnly = TRUE)
   }
@@ -73,6 +77,15 @@ runCalibrationNIMBLE <- function(
                          model$getNodeNames(stochOnly = TRUE))
   if (!testDataNames) {
     stop("All dataNames must be stochastic nodes in the model.")
+  }
+
+  ## 0. deal with paramNodes. If missing we take all the stochastic nodes that are not data
+  if (is.null(paramNames)) {
+    paramNames <- model$getNodeNames(stochOnly = TRUE, includeData = FALSE)
+  }
+  paramNodes <- model$expandNodeNames(paramNames)
+  if (length(paramNodes) == 0) {
+    stop("paramNames did not match to any stochastic non-data nodes.")
   }
 
   ## check if the model is compiled model
@@ -90,7 +103,7 @@ runCalibrationNIMBLE <- function(
   rModel <- if (inherits(model, "CmodelBaseClass")) model$getModel() else model
 
   if (verbose) {
-    message("Data nodes: ", paste(dataNames, collapse = ", "))
+    message("Data nodes: ", paste(dataNodes, collapse = ", "))
     message("Model class: ", paste(class(model), collapse = "/"))
     message("Compiled model class: ", paste(class(cmodel), collapse = "/"))
   }
@@ -103,7 +116,7 @@ runCalibrationNIMBLE <- function(
     ## Configure and compile MCMC for main chain
     if (is.null(mcmcConfFun)) {
       mcmcConfFun <- function(model) {
-        configureMCMC(model, monitors = paramNames, print = FALSE)
+        configureMCMC(model, monitors = paramNodes, print = FALSE)
       }
     }
     mcmcConf       <- mcmcConfFun(rModel)
@@ -140,16 +153,16 @@ runCalibrationNIMBLE <- function(
   }
 
   ## Validate samples contain required params
-  if (!all(paramNames %in% colnames(MCMCSamples))) {
+  if (!all(paramNodes %in% colnames(MCMCSamples))) {
     stop("paramNames missing from MCMCSamples: ",
-         paste(setdiff(paramNames, colnames(MCMCSamples)), collapse = ", "))
+         paste(setdiff(paramNodes, colnames(MCMCSamples)), collapse = ", "))
   }
 
-  ## Ensure we have a compiled MCMC object for replicated calibration runs
+    ## Ensure we have a compiled MCMC object for replicated calibration runs
   if (!exists("cmcmc", inherits = FALSE)) {
     if (is.null(mcmcConfFun)) {
       mcmcConfFun <- function(model) {
-        configureMCMC(model, monitors = paramNames, print = FALSE)
+        configureMCMC(model, monitors = paramNodes, print = FALSE)
       }
     }
     mcmcConf       <- mcmcConfFun(rModel)
@@ -157,12 +170,26 @@ runCalibrationNIMBLE <- function(
     cmcmc          <- compileNimble(mcmcUncompiled, project = rModel, resetFunctions = TRUE)
   }
 
-  ## Extract observed data from the model
-  ## SP: need to think better if data is a vector/matrix/array - something else?
-  observedData <- cmodel[[dataNames]]
+  ## SP: extract observed data as a numeric vector over expanded data nodes
+  observedData <- values(cmodel, dataNodes)
 
-  ## -------------------------------------------------------------------------------------------- ##
-  ## some messages for checks
+  ## 4. Build MCMCFun for replicated datasets
+  MCMCFun <- function(targetData, control) {
+    if (!is.numeric(targetData) || length(targetData) != length(dataNodes)) {
+      stop("targetData must be a numeric vector with one entry per data node.")
+    }
+
+    values(cmodel, dataNodes) <- targetData
+
+    repMCMC <- runMCMC(
+      cmcmc,
+      niter   = control$niter,
+      nburnin = control$nburnin,
+      thin    = control$thin
+    )
+    as.matrix(repMCMC)
+  }
+
   if (verbose) {
     message("modifiying the control for runCalibration:")
     message("  mcmc fields: ", paste(names(control$mcmc), collapse = ", "))
@@ -172,11 +199,21 @@ runCalibrationNIMBLE <- function(
 
   defaultControl <- list(
     mcmc = MCMCcontrolRep,
+    ## SP: it may be helful to pass the nodes
+    ## but depends on defaults for the discrepancy
+    ## functions
     disc = list(
       model      = rModel,
       dataNames  = dataNames,
-      paramNames = paramNames
+      dataNodes  = dataNodes,
+      paramNames = paramNames,
+      paramNodes = paramNodes
     ),
+    # disc = list(
+    #   model      = model,
+    #   dataNames  = dataNames,
+    #   paramNames = paramNames
+    # ),
     draw = list()
   )
 
