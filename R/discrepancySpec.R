@@ -186,6 +186,7 @@ makeDiscrepancyRFun <- function(model, disc) {
       model$calculate()
     }, add = TRUE)
 
+
     if (!is.null(data)) {
       if (!is.numeric(data) || length(data) != length(disc$dataNodes)) {
         stop(
