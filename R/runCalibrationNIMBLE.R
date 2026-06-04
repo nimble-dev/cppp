@@ -45,7 +45,7 @@ runCalibrationNIMBLE <- function(
     dataNames <- model$getNodeNames(dataOnly = TRUE)
   }
   ## expand to nodes
-  dataNodes <- model$expandNodeNames(dataNames)
+  dataNodes <- model$expandNodeNames(dataNames, returnScalarComponents = TRUE)
   # ensure dataNames correspond to stochastic nodes
   testDataNames <- all(dataNodes %in%
                          model$getNodeNames(stochOnly = TRUE))
@@ -57,7 +57,7 @@ runCalibrationNIMBLE <- function(
   if (is.null(paramNames)) {
     paramNames <- model$getNodeNames(stochOnly = TRUE, includeData = FALSE)
   }
-  paramNodes <- model$expandNodeNames(paramNames)
+  paramNodes <- model$expandNodeNames(paramNames, returnScalarComponents = TRUE)
   if (length(paramNodes) == 0) {
     stop("paramNames did not match to any stochastic non-data nodes.")
   }
@@ -205,4 +205,3 @@ runCalibrationNIMBLE <- function(
   )
 
 }
-

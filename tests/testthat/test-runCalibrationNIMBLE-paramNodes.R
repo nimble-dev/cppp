@@ -29,7 +29,7 @@ baseModel <- nimbleModel(
 
 dataNames  <- "y"
 paramNames <- "beta"
-paramNodes <- baseModel$expandNodeNames(paramNames)
+paramNodes <- baseModel$expandNodeNames(paramNames, returnScalarComponents = TRUE)
 
 simDataFun <- function(thetaRow, control) {
   model      <- control$model

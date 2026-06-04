@@ -3,14 +3,14 @@
 
 test_that("transferAutocorrelation exists when implemented", {
   expect_true(
-    "transferAutocorrelation" %in% ls("package:cpppPrototype"),
+    exists("transferAutocorrelation", envir = asNamespace("cppp"), inherits = FALSE),
     info = "transferAutocorrelation() is not yet defined or exported"
   )
 })
 
 test_that("runCalibration exists", {
   expect_true(
-    "runCalibration" %in% ls("package:cpppPrototype"),
+    exists("runCalibration", envir = asNamespace("cppp"), inherits = FALSE),
     info = "runCalibration() not found in package namespace"
   )
 })
