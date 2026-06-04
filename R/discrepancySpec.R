@@ -5,25 +5,21 @@
 #' and build an R or NIMBLE implementation from the completed specification.
 #'
 #' @param kind Character scalar naming the structural kind of discrepancy.
-#'   Current options are `"data_only"`, `"data_plus_model"`, and
-#'   `"data_plus_external"`.
+#'   Current options are `"data_only"` and `"data_plus_model"`.
 #' @param name Character scalar naming the discrepancy.
 #' @param dataNodes Optional character vector of data node names. If `NULL`,
 #'   these may be inferred from a NIMBLE model later.
 #' @param modelNodes Optional character vector of model-based nodes used by the
 #'   discrepancy besides the data nodes. For example, expected-value nodes for
 #'   chi-squared or Freeman-Tukey discrepancies.
-#' @param external Optional user-supplied external quantities for discrepancies
-#'   that depend on inputs outside the model state.
 #'
 #' @return An object of class `cppp_discrepancy`.
 #' @export
 discrepancy <- function(kind,
                         name,
                         dataNodes = NULL,
-                        modelNodes = NULL,
-                        external = NULL) {
-  validKinds <- c("data_only", "data_plus_model", "data_plus_external")
+                        modelNodes = NULL) {
+  validKinds <- c("data_only", "data_plus_model")
 
   if (!is.character(kind) || length(kind) != 1L) {
     stop("`kind` must be a single character string.", call. = FALSE)
@@ -47,8 +43,7 @@ discrepancy <- function(kind,
     kind = kind,
     name = name,
     dataNodes = dataNodes,
-    modelNodes = modelNodes,
-    external = external
+    modelNodes = modelNodes
   )
 
   class(x) <- "cppp_discrepancy"
@@ -160,7 +155,8 @@ completeDiscrepancy <- function(model, disc) {
 }
 
 
-#' Build an R discrepancy evaluator
+#' Build an R discrepancy evaluator - this is here just for testing and building
+#' but likely not needed in the future
 #'
 #' Create a simple R function from a completed discrepancy specification. This
 #' is a lightweight way to experiment with discrepancy specifications before

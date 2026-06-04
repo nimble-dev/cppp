@@ -11,7 +11,6 @@ test_that("discrepancy() creates a basic discrepancy spec", {
   expect_equal(disc$name, "mean")
   expect_null(disc$dataNodes)
   expect_null(disc$modelNodes)
-  expect_null(disc$external)
 })
 
 ## allow either one discrepancy or a list of discrepancies.
