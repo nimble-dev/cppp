@@ -37,17 +37,19 @@ newCpppResult <- function(CPPP = NA_real_,
 validateCpppResult <- function(x) {
   stopifnot(inherits(x, "cpppResult"))
 
-  # CPPP: allow NA for now; if finite, must be a scalar in [0,1]
-  if (!(length(x$CPPP) == 1L && is.numeric(x$CPPP))) {
-    stop("`CPPP` must be a numeric scalar (NA allowed).", call. = FALSE)
+  # CPPP: one value per discrepancy (length K >= 1). Allow NA; finite values in [0,1].
+  if (!(is.numeric(x$CPPP) && length(x$CPPP) >= 1L)) {
+    stop("`CPPP` must be a numeric vector with one value per discrepancy (NA allowed).",
+         call. = FALSE)
   }
-  if (is.finite(x$CPPP) && (x$CPPP < 0 || x$CPPP > 1)) {
+  finiteCPPP <- x$CPPP[is.finite(x$CPPP)]
+  if (length(finiteCPPP) && any(finiteCPPP < 0 | finiteCPPP > 1)) {
     stop("`CPPP` must be in [0,1] when finite.", call. = FALSE)
   }
 
-  # repPPP: numeric vector, all finite in [0,1] if provided
+  # repPPP: numeric vector or nReps x K matrix, all finite in [0,1] if provided
   if (!is.numeric(x$repPPP)) {
-    stop("`repPPP` must be a numeric vector.", call. = FALSE)
+    stop("`repPPP` must be numeric (vector or matrix).", call. = FALSE)
   }
   if (length(x$repPPP) && (!all(is.finite(x$repPPP)) || any(x$repPPP < 0 | x$repPPP > 1))) {
     stop("All `repPPP` values must be finite and in [0,1].", call. = FALSE)
