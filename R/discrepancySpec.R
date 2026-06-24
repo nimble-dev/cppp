@@ -155,82 +155,6 @@ completeDiscrepancy <- function(model, disc) {
 }
 
 
-#' Build an R discrepancy evaluator - this is here just for testing and building
-#' but likely not needed in the future
-#'
-#' Create a simple R function from a completed discrepancy specification. This
-#' is a lightweight way to experiment with discrepancy specifications before
-#' wiring them into the NIMBLE calibration backend.
-#'
-#' @param model A NIMBLE model.
-#' @param disc A `cppp_discrepancy` object.
-#'
-#' @return A function with signature `function(data = NULL)` that evaluates the
-#'   discrepancy. If `data` is supplied, the evaluator temporarily inserts it
-#'   into the model's data nodes, computes the discrepancy, and restores the
-#'   original data values before returning.
-#' @export
-makeDiscrepancyRFun <- function(model, disc) {
-  disc <- completeDiscrepancy(model, disc)
-
-  function(data = NULL) {
-    origData <- values(model, disc$dataNodes)
-    ## on.exit tells R what to do when exiting the function
-    ## I am already saying to restore original data into the model
-    on.exit({
-      values(model, disc$dataNodes) <- origData
-      model$calculate()
-    }, add = TRUE)
-
-
-    if (!is.null(data)) {
-      if (!is.numeric(data) || length(data) != length(disc$dataNodes)) {
-        stop(
-          "`data` must be a numeric vector matching the discrepancy data nodes.",
-          call. = FALSE
-        )
-      }
-      values(model, disc$dataNodes) <- data
-    }
-
-    model$calculate()
-
-    if (disc$kind == "data_only" && disc$name == "mean") {
-      return(mean(values(model, disc$dataNodes)))
-    }
-
-    if (disc$kind == "data_only" && disc$name == "variance") {
-      return(stats::var(values(model, disc$dataNodes)))
-    }
-
-    if (disc$kind == "data_plus_model" && disc$name == "deviance") {
-      return(2 * model$calculate(disc$dataNodes))
-    }
-
-    if (disc$kind == "data_plus_model" && disc$name == "chisquared") {
-      dataVal <- values(model, disc$dataNodes)
-      modelVal <- values(model, disc$modelNodes)
-      return(sum((dataVal - modelVal)^2 / (modelVal + 1e-6)))
-    }
-
-    if (disc$kind == "data_plus_model" && disc$name == "freemantukey") {
-      dataVal <- values(model, disc$dataNodes)
-      modelVal <- values(model, disc$modelNodes)
-      return(sum((sqrt(dataVal) - sqrt(modelVal))^2))
-    }
-
-    stop(
-      sprintf(
-        "No R evaluator implemented for kind = '%s', name = '%s'.",
-        disc$kind,
-        disc$name
-      ),
-      call. = FALSE
-    )
-  }
-}
-
-
 #' Build a NIMBLE discrepancy evaluator
 #'
 #' Create a NIMBLE function from a completed discrepancy specification. The
@@ -279,7 +203,8 @@ makeDiscrepancyNimbleFun <- function(model, disc) {
       },
       run = function() {
         returnType(double(0))
-        return(2 * modelLocal$calculate(dataNodesLocal))
+        ## Deviance = -2 * log-likelihood; calculate() returns the log-likelihood.
+        return(-2 * modelLocal$calculate(dataNodesLocal))
       }
     )(model = model, dataNodes = disc$dataNodes))
   }

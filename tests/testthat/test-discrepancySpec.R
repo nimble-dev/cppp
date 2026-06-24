@@ -80,34 +80,9 @@ test_that("completeDiscrepancy() requires model nodes when needed", {
   expect_equal(out$modelNodes, model$expandNodeNames("y_exp", returnScalarComponents = TRUE))
 })
 
-## Now we make a plain R version and see it run.
-test_that("makeDiscrepancyRFun() evaluates simple discrepancies", {
-  code <- nimbleCode({
-    for (i in 1:n) {
-      y[i] ~ dnorm(mu, sd = 1)
-    }
-    mu ~ dnorm(0, sd = 10)
-  })
-
-  model <- nimbleModel(
-    code = code,
-    constants = list(n = 4),
-    data = list(y = c(1, 2, 3, 4)),
-    inits = list(mu = 0)
-  )
-
-  meanFun <- makeDiscrepancyRFun(model, discrepancy("data_only", "mean"))
-  devFun <- makeDiscrepancyRFun(model, discrepancy("data_plus_model", "deviance"))
-
-  expect_equal(meanFun(), 2.5)
-  expect_true(is.numeric(devFun()))
-  expect_length(devFun(), 1)
-
-  expect_equal(meanFun(c(2, 2, 2, 2)), 2)
-})
-
-## Finally, we make a NIMBLE version from the same discrepancy and check
-## that it gives the same answer as the plain R version.
+## The NIMBLE discrepancy is the single source of truth. It runs uncompiled
+## (R-interpreted) for development and compiled for speed; we check both against
+## independent, hand-computed expected values.
 test_that("makeDiscrepancyNimbleFun() evaluates simple discrepancies", {
   code <- nimbleCode({
     for (i in 1:n) {
@@ -124,14 +99,21 @@ test_that("makeDiscrepancyNimbleFun() evaluates simple discrepancies", {
   )
   cModel <- compileNimble(model)
 
-  meanR <- makeDiscrepancyRFun(model, discrepancy("data_only", "mean"))
+  ## Independent oracle: y = c(1,2,3,4), mu = 0, sd = 1.
+  expectedMean <- 2.5
+  expectedDev  <- -2 * sum(dnorm(c(1, 2, 3, 4), mean = 0, sd = 1, log = TRUE))
+
   meanNim <- makeDiscrepancyNimbleFun(model, discrepancy("data_only", "mean"))
   cMeanNim <- compileNimble(meanNim, project = cModel)
 
-  devR <- makeDiscrepancyRFun(model, discrepancy("data_plus_model", "deviance"))
   devNim <- makeDiscrepancyNimbleFun(model, discrepancy("data_plus_model", "deviance"))
   cDevNim <- compileNimble(devNim, project = cModel)
 
-  expect_equal(cMeanNim$run(), meanR())
-  expect_equal(cDevNim$run(), devR())
+  ## uncompiled (R-interpreted) execution
+  expect_equal(meanNim$run(), expectedMean)
+  expect_equal(devNim$run(), expectedDev)
+
+  ## compiled execution agrees with uncompiled and with the oracle
+  expect_equal(cMeanNim$run(), expectedMean)
+  expect_equal(cDevNim$run(), expectedDev)
 })
