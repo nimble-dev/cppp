@@ -8,7 +8,29 @@
 #' @param observedData Observed dataset (any R object).
 #' @param MCMCFun Function `function(targetData, control)` that runs a short MCMC conditional on `targetData`and returns posterior samples. `targetData` is the dataset treated as observed for the MCMC run.
 #' @param simulateNewDataFun Function `function(thetaRow, control)` that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.
-#' @param discFun Function `function(MCMCSamples, targetData, control)` that returns a list with components `obs` and `sim`, each a numeric vector over posterior draws. `targetData` is the dataset treated as observed for the discrepancy calculation.
+#' @param discFun Function `function(MCMCSamples, targetData, control)` that
+#'   returns a list with components `obs` and `sim`. `targetData` is the dataset
+#'   treated as observed for the discrepancy calculation.
+#'
+#'   Design note: `discFun` is the one place where the discrepancy values are
+#'   produced. There are two ways to produce them, and `discFun` hides which one
+#'   is used:
+#'   \itemize{
+#'     \item offline: it computes the discrepancies here in R, for each draw,
+#'       on `targetData` and on a simulated replicate `y*`.
+#'     \item online: the discrepancies were already computed during the MCMC, so
+#'       it just reads them back from columns of `MCMCSamples`.
+#'   }
+#'   Either way, `runCalibration()` receives the same thing and does not need to
+#'   know how the numbers were made. Users are not expected to write `discFun`
+#'   by hand: it will be built automatically from a discrepancy/simulation
+#'   specification. The specification is what users work with; `discFun` is an
+#'   internal detail.
+#'
+#'   `obs` and `sim` each hold one discrepancy value per posterior draw. With a
+#'   single discrepancy this is a plain numeric vector (one value per draw).
+#'   With several discrepancies it is an `nDraws x K` matrix: one row per draw,
+#'   one column per discrepancy. `obs` and `sim` must have the same shape.
 #' @param nReps Number of calibration replications.
 #' @param drawIndexSelector Optional function `function(MCMCSamples, nReps, control)`
 #'   returning the indices of rows to use as seeds for calibration.
@@ -92,21 +114,26 @@ runCalibration <- function(
   obsDisc <- discFun(MCMCSamples  = MCMCSamples,
                      targetData   = observedData,
                      control      = discControl)
-  if (!all(c("obs", "sim") %in% names(obsDisc))) {
-    stop("discFun must return a list with components 'obs' and 'sim'.")
-  }
-  ## discrepancy computed on real data
-  origObsDisc <- as.numeric(obsDisc$obs)
-  origSimDisc <- as.numeric(obsDisc$sim)
-  if (length(origObsDisc) != length(origSimDisc)) {
-    stop("'obs' and 'sim' must have the same length.")
-  }
+  ## Normalize the discFun output to nDraws x K matrices (one column per
+  ## discrepancy). The discrepancy itself is always a scalar per (draw,
+  ## discrepancy); the matrix is just those scalars stacked. We accept a plain
+  ## vector (K = 1) for backward compatibility and so the single- and
+  ## multiple-discrepancy cases share one downstream code path. See the
+  ## `discFun` design note in this function's docs.
+  origObs <- asDiscMatrix(obsDisc$obs, obsDisc)
+  origSim <- asDiscMatrix(obsDisc$sim, obsDisc)
+  checkDiscMatrices(origObs, origSim)
 
-  # scalar PPP for the observed data
-  obsPPP <- mean(origSimDisc >= origObsDisc)
+  discNames <- colnames(origObs)
+  K <- ncol(origObs)
 
-  ## 3. Calibration worlds: PPP for each replicates
-  repPPP <- numeric(nReps)
+  # per-discrepancy PPP for the observed data (named length-K vector)
+  obsPPP <- colMeans(origSim >= origObs)
+  names(obsPPP) <- discNames
+
+  ## 3. Calibration worlds: per-discrepancy PPP for each replicate
+  repPPP <- matrix(NA_real_, nrow = nReps, ncol = K,
+                   dimnames = list(NULL, discNames))
   repDiscList <- vector("list", nReps)
 
   for (r in seq_len(nReps)) {
@@ -126,35 +153,30 @@ runCalibration <- function(
                        targetData = newData,
                          control  = discControl)
 
-    if (!all(c("obs", "sim") %in% names(repDisc))) {
-      stop("discFun must return a list with components 'obs' and 'sim'.")
-    }
-    repObsDisc <- as.numeric(repDisc$obs)
-    repSimDisc <- as.numeric(repDisc$sim)
-    if (length(repObsDisc) != length(repSimDisc)) {
-      stop("'obs' and 'sim' must have the same length in each calibration world.")
-    }
+    repObs <- asDiscMatrix(repDisc$obs, repDisc, discNames)
+    repSim <- asDiscMatrix(repDisc$sim, repDisc, discNames)
+    checkDiscMatrices(repObs, repSim, K)
 
-    repPPP[r]         <- mean(repSimDisc >= repObsDisc)
-    repDiscList[[r]] <- repDisc
+    repPPP[r, ]      <- colMeans(repSim >= repObs)
+    repDiscList[[r]] <- list(obs = repObs, sim = repSim)
 
   }
 
-  ## 4. CPPP: how extreme obsPPP is under the calibration distribution
-  CPPP <- mean(repPPP <= obsPPP)
+  ## 4. CPPP: how extreme obsPPP is under the calibration distribution,
+  ## computed separately for each discrepancy (named length-K vector).
+  CPPP <- vapply(seq_len(K),
+                 function(k) mean(repPPP[, k] <= obsPPP[k]),
+                 numeric(1))
+  names(CPPP) <- discNames
 
   ## 5. Collect all discrepancies
   discrepancies <- list(
+    names = discNames,
     obs = list(
-      obs = origObsDisc,
-      sim = origSimDisc
+      obs = origObs,
+      sim = origSim
     ),
-    rep = lapply(repDiscList, function(d) {
-      list(
-        obs = as.numeric(d$obs),
-        sim = as.numeric(d$sim)
-      )
-    })
+    rep = repDiscList
   )
 
   ## 6. Return cpppResult object
@@ -165,6 +187,60 @@ runCalibration <- function(
     discrepancies = discrepancies,
     drawnIndices  = drawnIndices
   )
+}
+
+
+#' Coerce discrepancy output to an nDraws x K matrix
+#'
+#' A `discFun` may return one discrepancy per draw (a numeric vector) or several
+#' (a matrix with one column per discrepancy). This helper normalizes both to a
+#' matrix with named columns so the engine can treat the single- and
+#' multiple-discrepancy cases uniformly.
+#'
+#' @param x Numeric vector or matrix returned by a `discFun` component.
+#' @param disc The full list returned by the `discFun`, inspected for a `names`
+#'   element giving discrepancy names.
+#' @param fallbackNames Optional character vector of column names to use when
+#'   none are available from `x` or `disc`.
+#'
+#' @return A numeric matrix with named columns.
+#' @keywords internal
+asDiscMatrix <- function(x, disc = NULL, fallbackNames = NULL) {
+  m <- if (is.matrix(x)) {
+    storage.mode(x) <- "double"
+    x
+  } else {
+    matrix(as.numeric(x), ncol = 1L)
+  }
+
+  if (is.null(colnames(m))) {
+    nm <- fallbackNames
+    if (is.null(nm) && !is.null(disc$names)) nm <- disc$names
+    if (is.null(nm)) {
+      nm <- if (ncol(m) == 1L) "discrepancy" else paste0("discrepancy", seq_len(ncol(m)))
+    }
+    colnames(m) <- nm
+  }
+
+  m
+}
+
+
+#' Validate paired discrepancy matrices
+#'
+#' @param obs Numeric matrix of observed-side discrepancies.
+#' @param sim Numeric matrix of replicated-side discrepancies.
+#' @param K Optional expected number of discrepancies (columns).
+#' @keywords internal
+checkDiscMatrices <- function(obs, sim, K = NULL) {
+  if (!all(dim(obs) == dim(sim))) {
+    stop("discFun 'obs' and 'sim' must have the same dimensions.", call. = FALSE)
+  }
+  if (!is.null(K) && ncol(obs) != K) {
+    stop("discFun returned a different number of discrepancies across worlds.",
+         call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 
