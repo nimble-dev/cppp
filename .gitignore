@@ -57,3 +57,6 @@ rsconnect/
 /*_files/
 
 # End of https://www.toptal.com/developers/gitignore/api/r
+
+# Local working notes / dev plans (not part of the package)
+DEV_PLAN_offline_discrepancy.md
