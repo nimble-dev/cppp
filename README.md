@@ -2,6 +2,16 @@
 
 A package for Calibrated posterior predictive p-values.
 
+> ### ⚠️ Work in progress — not ready for use
+>
+> This is an active research project in early development. It is public so
+> collaborators can follow along, not because it is ready.
+>
+> - The interface changes often, without notice or deprecation.
+> - There is no released version, and nothing here should be depended on.
+>
+> If you want to try it, get in touch first.
+
 It provides a general framework for a MCMC engine—to:
 
 1. Compute calibrated posterior p-values (cppp),
@@ -52,27 +62,24 @@ $$
 ### Helpers
 | Function | Role |
 |-----------|------|
-| `make_col_disc_fun()` | Returns a function that extracts an “online” discrepancy column. |
-| `make_offline_disc_fun()` | Returns a function that computes discrepancies “offline.” |
-
-Other possible helpers? 
-
-| Function | Role |
-|-----------|------|
-| `make_data_sim_fun()` | Returns a function that simulates new datasets $\tilde y$. |
-| `make_MCMCfun()` | ??  |
-| `compute_cppp()` | Computes cppp from $\hat p_{\text{obs}}$ and $\hat p_j$. |
-| `transfer_ess_variance()` | Estimates cppp variance via transfer ESS. |
+| `discrepancy()` | Describes one discrepancy: its name, the nodes it reads, and optionally your own nimbleFunction. |
+| `simulation()` | Describes how replicated datasets are generated. |
+| `makeColDiscFun()` | Returns a function that extracts an “online” discrepancy column. |
+| `makeOfflineDiscFun()` | Returns a function that computes discrepancies “offline.” |
+| `computeCppp()` | Computes cppp from $\hat p_{\text{obs}}$ and $\hat p_j$. |
+| `transferAutocorrelation()` | Transfer-ESS machinery for the cppp variance. Placeholder — not implemented. |
 
 ### Data object
 
-`cpppResult` (S3) 
+`cpppResult` (S3), currently holding:
 
-  - cppp estimate, se, confidence interval
-  - observed ppp, replicated ppp
-  - observed discrepancies, replicated discrepancies (optional?)
-  - informations about the calibration procedure? number of replicates and mcmc per replicated
-  - methods: `print`, `summary`, `plot`
+  - `CPPP` — one value per discrepancy
+  - `obsPPP`, `repPPP` — observed and replicated posterior predictive p-values
+  - `discrepancies` — the observed and replicated discrepancy values
+  - `drawnIndices` — which posterior draws seeded the calibration replicates
+
+Standard errors, confidence intervals, and `print` / `summary` / `plot` methods
+are planned but not implemented.
 
 ---
 
@@ -80,48 +87,27 @@ Other possible helpers?
 
 1. **Build your MCMC engine**
    - For NIMBLE: configure a model and compiled MCMC object.
-   - Otherwise: supply a function `MCMC_fun(new_data, control)` that runs an MCMC and returns samples.
+   - Otherwise: supply a function `MCMCFun(targetData, control)` that runs an MCMC and returns samples.
 
 2. **Provide a data simulator**
-   - `new_data_fun()` draws a dataset $\tilde{y}$ from the model posterior predictive.
+   - `simulateNewDataFun(thetaRow, control)` draws a dataset $\tilde{y}$ from the model posterior predictive.
 
-3. **Provide a discrepancy handler**
+3. **Describe your discrepancies**
+   - `discrepancy("mean")` names one the package ships; `discrepancy("asymm", modelNodes = "mu", fun = myAsymm)` supplies your own as a nimbleFunction.
    - *Online*: the discrepancy or PPP is computed during MCMC; just extract the column.
    - *Offline*: compute $D(y,\theta)$ and $D(y^*,\theta)$ after sampling.
+   - Note: the step that turns these descriptions into what `runCalibration()` consumes is still being built.
 
 4. **Run calibration**
    - Call `runCalibration()` with your functions and number of replicates $r$.
    - the function iteratively: simulate → run short chain → compute $\hat{p}_j$.
 
 5. **Compute cppp and variance**
-   - `compute_cppp(p_hat_obs, p_hat_cal)`
-   - `transfer_ess_variance(delta_chain, p_hat_obs, p_hat_cal, m_tilde)`
+   - `computeCppp(obsPPP, repPPP)`
+   - `transferAutocorrelation(deltaChain, obsPPP, repPPP, mTilde)` — not implemented yet
 
 ---
 
 ## Example
 
-```r
-# define simulator for new datasets
-new_data_fun <- make_data_sim_fun(...)
-
-# create a discrepancy extractor
-disc_fun <- make_col_disc_fun("ppp_column")
-
-# or an offline discrepancy
-disc_fun <- make_offline_disc_fun(control = list(
-  new_data_fun = new_data_fun,
-  discrepancy  = discrepancy))
-
-
-# orchestrate calibration
-res <- runCalibration(MCMC_samples_obs, MCMC_fun, new_data_fun, disc_fun,
-                      num_reps = 50, control = list(seed = 123))
-
-# compute cppp and variance
-cppp_val <- compute_cppp(res$p_hat_obs, res$p_hat_cal)
-var_out  <- transfer_ess_variance(res$delta_chain, res$p_hat_obs, res$p_hat_cal,
-                                  m_tilde = res$m_tilde, c = 1.3)
-
-summary(var_out)
-```
+TO DO 
