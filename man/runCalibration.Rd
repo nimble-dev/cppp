@@ -25,7 +25,29 @@ runCalibration(
 
 \item{simulateNewDataFun}{Function \verb{function(thetaRow, control)} that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.}
 
-\item{discFun}{Function \verb{function(MCMCSamples, targetData, control)} that returns a list with components \code{obs} and \code{sim}, each a numeric vector over posterior draws. \code{targetData} is the dataset treated as observed for the discrepancy calculation.}
+\item{discFun}{Function \verb{function(MCMCSamples, targetData, control)} that
+returns a list with components \code{obs} and \code{sim}. \code{targetData} is the dataset
+treated as observed for the discrepancy calculation.
+
+Design note: \code{discFun} is the one place where the discrepancy values are
+produced. There are two ways to produce them, and \code{discFun} hides which one
+is used:
+\itemize{
+\item offline: it computes the discrepancies here in R, for each draw,
+on \code{targetData} and on a simulated replicate \verb{y*}.
+\item online: the discrepancies were already computed during the MCMC, so
+it just reads them back from columns of \code{MCMCSamples}.
+}
+Either way, \code{runCalibration()} receives the same thing and does not need to
+know how the numbers were made. Users are not expected to write \code{discFun}
+by hand: it will be built automatically from a discrepancy/simulation
+specification. The specification is what users work with; \code{discFun} is an
+internal detail.
+
+\code{obs} and \code{sim} each hold one discrepancy value per posterior draw. With a
+single discrepancy this is a plain numeric vector (one value per draw).
+With several discrepancies it is an \verb{nDraws x K} matrix: one row per draw,
+one column per discrepancy. \code{obs} and \code{sim} must have the same shape.}
 
 \item{nReps}{Number of calibration replications.}
 
