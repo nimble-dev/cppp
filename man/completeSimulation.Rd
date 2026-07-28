@@ -4,12 +4,16 @@
 \alias{completeSimulation}
 \title{Complete a simulation specification from a model}
 \usage{
-completeSimulation(model, sim)
+completeSimulation(model, sim, paramNodes = NULL)
 }
 \arguments{
 \item{model}{A NIMBLE model.}
 
 \item{sim}{A \code{cppp_simulation} object.}
+
+\item{paramNodes}{Optional character vector of the model nodes set from each
+posterior draw. Used only in \code{"marginal"} mode, to work out which nodes to
+resimulate. Not needed if \code{simulateNodes} is already supplied.}
 }
 \value{
 A completed \code{cppp_simulation} object.

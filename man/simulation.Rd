@@ -14,7 +14,9 @@ simulation(mode = "conditional", dataNodes = NULL, simulateNodes = NULL)
 these may be inferred from a NIMBLE model later.}
 
 \item{simulateNodes}{Optional character vector of nodes to resimulate when
-generating a replicate. If \code{NULL}, defaults depend on \code{mode}.}
+generating a replicate. If \code{NULL}, defaults depend on \code{mode}: the data
+nodes for \code{"conditional"}, and every stochastic node downstream of the
+parameters for \code{"marginal"}.}
 }
 \value{
 An object of class \code{cppp_simulation}.
@@ -22,4 +24,11 @@ An object of class \code{cppp_simulation}.
 \description{
 A simulation specification describes how replicated data should be generated
 from a model when evaluating discrepancies.
+}
+\details{
+The two modes differ in how much of the model is redrawn for a replicate.
+\code{"conditional"} holds any latent quantities fixed at the values from the
+posterior draw and resimulates only the data. \code{"marginal"} also redraws the
+latent quantities, so the replicate comes from the model integrated over
+them.
 }
