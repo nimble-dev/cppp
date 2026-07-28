@@ -20,7 +20,7 @@ test_that("runOneDiscrepancyStepR() runs one discrepancy step", {
     inits = list(mu = 0)
   )
 
-  disc <- discrepancy("data_only", "mean")
+  disc <- discrepancy("mean")
   sim <- simulation("conditional")
 
   out <- runOneDiscrepancyStepR(

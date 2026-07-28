@@ -1,49 +1,79 @@
 #' Create a discrepancy specification
 #'
-#' A discrepancy specification is a lightweight user-facing description of a
-#' discrepancy. The package can later complete missing defaults from a model
-#' and build an R or NIMBLE implementation from the completed specification.
+#' A discrepancy specification is simply a list containing the description of a
+#' discrepancy. The package can use it to complete missing defaults from a model
+#' and build a NIMBLE implementation from the completed specification.
 #'
-#' @param kind Character scalar naming the structural kind of discrepancy.
-#'   Current options are `"data_only"` and `"data_plus_model"`.
-#' @param name Character scalar naming the discrepancy.
+#' There is one way to define a discrepancy: a nimbleFunction whose setup takes
+#' `(model, dataNodes, modelNodes)` and whose `run()` reads the model's current
+#' state and returns a single number. The package ships a few such functions
+#' (see [discrepancyBuiltins]); naming one of them is a shortcut for supplying
+#' it yourself. Pass `fun` to use your own.
+#'
+#' To use an R function inside your own discrepancy, wrap it with
+#' `nimble::nimbleRcall()` in your own script, for example:
+#'
+#' ```
+#' sortR <- nimbleRcall(prototype  = function(x = double(1)){},
+#'                      Rfun       = "sort",
+#'                      returnType = double(1))
+#' ```
+#'
+#' @param name Character scalar naming the discrepancy. It labels this
+#'   discrepancy in the results, so it must be supplied even when `fun` is.
+#'   Without `fun`, it must name one of the built-in discrepancies.
 #' @param dataNodes Optional character vector of data node names. If `NULL`,
-#'   these may be inferred from a NIMBLE model later.
+#'   these may be inferred from a NIMBLE model.
 #' @param modelNodes Optional character vector of model-based nodes used by the
 #'   discrepancy besides the data nodes. For example, expected-value nodes for
-#'   chi-squared or Freeman-Tukey discrepancies.
+#'   chi-squared.
+#' @param fun Optional nimbleFunction implementing your own discrepancy, in the
+#'   shape described above. If `NULL`, `name` is looked up among the built-ins.
 #'
 #' @return An object of class `cppp_discrepancy`.
 #' @export
-discrepancy <- function(kind,
-                        name,
+discrepancy <- function(name,
                         dataNodes = NULL,
-                        modelNodes = NULL) {
-  validKinds <- c("data_only", "data_plus_model")
-
-  if (!is.character(kind) || length(kind) != 1L) {
-    stop("`kind` must be a single character string.", call. = FALSE)
-  }
-
-  if (!(kind %in% validKinds)) {
-    stop(
-      sprintf(
-        "`kind` must be one of: %s.",
-        paste(validKinds, collapse = ", ")
-      ),
-      call. = FALSE
-    )
-  }
+                        modelNodes = NULL,
+                        fun = NULL) {
 
   if (!is.character(name) || length(name) != 1L) {
     stop("`name` must be a single character string.", call. = FALSE)
   }
 
+  if (is.null(fun)) {
+    if (!(name %in% names(discrepancyBuiltins))) {
+      stop(
+        sprintf(
+          "Unknown discrepancy '%s'. Built-in discrepancies are: %s. Supply `fun` to use your own.",
+          name,
+          paste(names(discrepancyBuiltins), collapse = ", ")
+        ),
+        call. = FALSE
+      )
+    }
+  } else {
+    if (!is.function(fun)) {
+      stop("`fun` must be a nimbleFunction.", call. = FALSE)
+    }
+    ## Otherwise `name` would label the results with a built-in's name while
+    ## computing something else.
+    if (name %in% names(discrepancyBuiltins)) {
+      stop(
+        sprintf(
+          "'%s' is a built-in discrepancy; choose a different `name` for your own.",
+          name
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
   x <- list(
-    kind = kind,
     name = name,
     dataNodes = dataNodes,
-    modelNodes = modelNodes
+    modelNodes = modelNodes,
+    fun = fun
   )
 
   class(x) <- "cppp_discrepancy"
@@ -80,8 +110,9 @@ standardizeDiscrepancies <- function(x) {
 
 #' Complete a discrepancy specification from a model
 #'
-#' Fill in defaults for built-in discrepancy types using information from a
-#' NIMBLE model.
+#' Fill in the node names a discrepancy needs, using information from a NIMBLE
+#' model. Nothing here depends on *which* discrepancy it is: a discrepancy that
+#' needs particular nodes checks for them itself, when it is built.
 #'
 #' @param model A NIMBLE model.
 #' @param disc A `cppp_discrepancy` object.
@@ -102,64 +133,26 @@ completeDiscrepancy <- function(model, disc) {
     returnScalarComponents = TRUE
   )
 
-  if (out$kind == "data_only" &&
-      out$name %in% c("mean", "variance")) {
-    return(out)
+  ## character(0) rather than NULL: every discrepancy's setup is called with all
+  ## three arguments, and those that ignore `modelNodes` must still receive it.
+  out$modelNodes <- if (is.null(out$modelNodes)) {
+    character(0)
+  } else {
+    model$expandNodeNames(out$modelNodes, returnScalarComponents = TRUE)
   }
 
-  if (out$kind == "data_plus_model" &&
-      out$name %in% c("deviance")) {
-    return(out)
-  }
-
-  if (out$kind == "data_plus_model" &&
-      out$name %in% c("chisquared", "freemantukey")) {
-    if (is.null(out$modelNodes)) {
-      stop(
-        sprintf(
-          "Discrepancy '%s' requires `modelNodes`.",
-          out$name
-        ),
-        call. = FALSE
-      )
-    }
-
-    out$modelNodes <- model$expandNodeNames(
-      out$modelNodes,
-      returnScalarComponents = TRUE
-    )
-
-    if (length(out$modelNodes) != length(out$dataNodes)) {
-      stop(
-        sprintf(
-          "`modelNodes` must match `dataNodes` in length for '%s'.",
-          out$name
-        ),
-        call. = FALSE
-      )
-    }
-
-    return(out)
-  }
-
-  stop(
-    sprintf(
-      paste(
-        "Unsupported discrepancy combination: kind = '%s', name = '%s'."
-      ),
-      out$kind,
-      out$name
-    ),
-    call. = FALSE
-  )
+  out
 }
 
 
 #' Build a NIMBLE discrepancy evaluator
 #'
-#' Create a NIMBLE function from a completed discrepancy specification. The
-#' resulting NIMBLE function evaluates the discrepancy for the model's current
-#' state.
+#' Create the NIMBLE function for a discrepancy specification, pointed at the
+#' given model. The result has a `run()` method that evaluates the discrepancy
+#' for the model's current state.
+#'
+#' Built-in and user-supplied discrepancies are built by the same call; the only
+#' difference is where the nimbleFunction came from.
 #'
 #' @param model A NIMBLE model.
 #' @param disc A `cppp_discrepancy` object.
@@ -169,84 +162,22 @@ completeDiscrepancy <- function(model, disc) {
 makeDiscrepancyNimbleFun <- function(model, disc) {
   disc <- completeDiscrepancy(model, disc)
 
-  if (disc$kind == "data_only" && disc$name == "mean") {
-    return(nimbleFunction(
-      setup = function(model, dataNodes) {
-        modelLocal <- model
-        dataNodesLocal <- dataNodes
-      },
-      run = function() {
-        returnType(double(0))
-        return(mean(values(modelLocal, dataNodesLocal)))
-      }
-    )(model = model, dataNodes = disc$dataNodes))
+  gen <- if (!is.null(disc$fun)) {
+    disc$fun
+  } else {
+    discrepancyBuiltins[[disc$name]]
   }
 
-  if (disc$kind == "data_only" && disc$name == "variance") {
-    return(nimbleFunction(
-      setup = function(model, dataNodes) {
-        modelLocal <- model
-        dataNodesLocal <- dataNodes
-      },
-      run = function() {
-        returnType(double(0))
-        return(var(values(modelLocal, dataNodesLocal)))
-      }
-    )(model = model, dataNodes = disc$dataNodes))
+  if (is.null(gen)) {
+    stop(
+      sprintf(
+        "Unknown discrepancy '%s'. Built-in discrepancies are: %s.",
+        disc$name,
+        paste(names(discrepancyBuiltins), collapse = ", ")
+      ),
+      call. = FALSE
+    )
   }
 
-  if (disc$kind == "data_plus_model" && disc$name == "deviance") {
-    return(nimbleFunction(
-      setup = function(model, dataNodes) {
-        modelLocal <- model
-        dataNodesLocal <- dataNodes
-      },
-      run = function() {
-        returnType(double(0))
-        ## Deviance = -2 * log-likelihood; calculate() returns the log-likelihood.
-        return(-2 * modelLocal$calculate(dataNodesLocal))
-      }
-    )(model = model, dataNodes = disc$dataNodes))
-  }
-
-  if (disc$kind == "data_plus_model" && disc$name == "chisquared") {
-    return(nimbleFunction(
-      setup = function(model, dataNodes, modelNodes) {
-        modelLocal <- model
-        dataNodesLocal <- dataNodes
-        modelNodesLocal <- modelNodes
-      },
-      run = function() {
-        dataVal <- values(modelLocal, dataNodesLocal)
-        modelVal <- values(modelLocal, modelNodesLocal)
-        returnType(double(0))
-        return(sum((dataVal - modelVal)^2 / (modelVal + 1e-6)))
-      }
-    )(model = model, dataNodes = disc$dataNodes, modelNodes = disc$modelNodes))
-  }
-
-  if (disc$kind == "data_plus_model" && disc$name == "freemantukey") {
-    return(nimbleFunction(
-      setup = function(model, dataNodes, modelNodes) {
-        modelLocal <- model
-        dataNodesLocal <- dataNodes
-        modelNodesLocal <- modelNodes
-      },
-      run = function() {
-        dataVal <- values(modelLocal, dataNodesLocal)
-        modelVal <- values(modelLocal, modelNodesLocal)
-        returnType(double(0))
-        return(sum((sqrt(dataVal) - sqrt(modelVal))^2))
-      }
-    )(model = model, dataNodes = disc$dataNodes, modelNodes = disc$modelNodes))
-  }
-
-  stop(
-    sprintf(
-      "No NIMBLE evaluator implemented for kind = '%s', name = '%s'.",
-      disc$kind,
-      disc$name
-    ),
-    call. = FALSE
-  )
+  gen(model, disc$dataNodes, disc$modelNodes)
 }
