@@ -26,7 +26,7 @@ An object of class \code{cppp_discrepancy}.
 }
 \description{
 A discrepancy specification is simply a list containing the description of a
-discrepancy. The package can later complete missing defaults from a model
+discrepancy. The package can use it to complete missing defaults from a model
 and build a NIMBLE implementation from the completed specification.
 }
 \details{

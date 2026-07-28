@@ -11,8 +11,8 @@ Tools for performing posterior predictive checks and computing calibrated poster
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/salleuska/cpppPrototype}
-  \item Report bugs at \url{https://github.com/salleuska/cpppPrototype/issues}
+  \item \url{https://github.com/nimble-dev/cppp}
+  \item Report bugs at \url{https://github.com/nimble-dev/cppp/issues}
 }
 
 }
