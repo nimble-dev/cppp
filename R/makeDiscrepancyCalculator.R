@@ -20,9 +20,6 @@
 #' [nimble::nimbleRcall()]. Set `compile = FALSE` for a quick check without
 #' waiting for compilation.
 #'
-#' Parameters may be derived nodes — `sigma`, say, when the model puts the prior
-#' on `log(sigma)`. The drawn values are used as they are given.
-#'
 #' @param model A NIMBLE model.
 #' @param discrepancies A [discrepancy()] specification, or a list of them.
 #' @param simulation A [simulation()] specification.
@@ -90,75 +87,115 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     }
   }
 
-  ## SP: we get dependencies of parameters because we call calculate after changing values
-  ## of the model parameters. self=FALSE to avoid overriding of deterministic nodes
-  ## (e.g. user monitoring sigma (deterministic) instead of log_sigma (stochastic))
-  paramDeps <- model$getDependencies(paramNodes, self = FALSE)
-  ## After simulating a replicate: the data's own densities and anything below.
-  dataDeps  <- model$getDependencies(simSpec$dataNodes, self = TRUE)
-  restoreDeps <- model$topologicallySortNodes(unique(c(paramDeps, dataDeps)))
+  K <- length(discs)
 
-  discFuns <- lapply(discs, function(d) makeDiscrepancyNimbleFun(model, d))
-  K <- length(discFuns)
+  ## The loop over draws lives inside a nimbleFunction, so it runs in compiled
+  ## code rather than crossing back into R for every draw and every
+  ## discrepancy. Compiling it also compiles the discrepancies with it, in one
+  ## call.
+  calcNF <- discrepancyCalculatorNF(
+    model      = model,
+    discs      = discs,
+    dataNodes  = simSpec$dataNodes,
+    simNodes   = simSpec$simulateNodes,
+    paramNodes = paramNodes
+  )
 
-  ## Compiled discrepancies read the compiled model's state, which is a
-  ## different object from the R model. So once we compile, everything below
-  ## works on the compiled copy: the values we write and the values the
-  ## discrepancies read have to live in the same place.
   if (compile) {
-    workModel <- compileNimble(model)
-    discFuns  <- lapply(discFuns, function(f) compileNimble(f, project = model))
-  } else {
-    workModel <- model
+    compiled <- compileNimble(list(model, calcNF))
+    calcNF   <- compiled[[2]]
   }
 
   function(MCMCSamples, targetData, control = NULL, ...) {
 
     MCMCSamples <- as.matrix(MCMCSamples)
 
-    ## The columns need not be in the same order as `paramNodes`, so line them
-    ## up by name. Matching against a matrix without names would give NA
-    ## positions and read nonsense, so stop instead.
+    ## Compiled code cannot pick columns out by name, so line them up here and
+    ## hand over just the parameter columns, in `paramNodes` order.
     absent <- setdiff(paramNodes, colnames(MCMCSamples))
     if (length(absent) > 0L) {
       stop("`MCMCSamples` has no column for: ", paste(absent, collapse = ", "),
            call. = FALSE)
     }
-    paramCols <- match(paramNodes, colnames(MCMCSamples))
+    draws <- MCMCSamples[, match(paramNodes, colnames(MCMCSamples)), drop = FALSE]
+    storage.mode(draws) <- "double"
 
     if (!is.numeric(targetData) || length(targetData) != length(simSpec$dataNodes)) {
       stop("`targetData` must be a numeric vector with one value per data node (",
            length(simSpec$dataNodes), " expected).", call. = FALSE)
     }
 
-    nDraws <- nrow(MCMCSamples)
-    obs <- matrix(NA_real_, nDraws, K, dimnames = list(NULL, discNames))
-    rep <- matrix(NA_real_, nDraws, K, dimnames = list(NULL, discNames))
+    res <- calcNF$run(draws, as.numeric(targetData))
 
-    ## SP: on exit we need to leave the model as we found it.
-    ## Restore once on exit is enough,
-    ## because every draw overwrites these before reading them.
-    savedData   <- values(workModel, simSpec$dataNodes)
-    savedParams <- values(workModel, paramNodes)
-    on.exit({
-      values(workModel, simSpec$dataNodes) <- savedData
-      values(workModel, paramNodes)        <- savedParams
-      workModel$calculate(restoreDeps)
-    })
+    obs <- matrix(res[, , 1], ncol = K)
+    sim <- matrix(res[, , 2], ncol = K)
+    colnames(obs) <- discNames
+    colnames(sim) <- discNames
 
-    for (j in seq_len(nDraws)) {
-      values(workModel, paramNodes)        <- MCMCSamples[j, paramCols]
-      values(workModel, simSpec$dataNodes) <- targetData
-      workModel$calculate(paramDeps)
-
-      for (k in seq_len(K)) obs[j, k] <- discFuns[[k]]$run()
-
-      workModel$simulate(simSpec$simulateNodes, includeData = TRUE)
-      workModel$calculate(dataDeps)
-
-      for (k in seq_len(K)) rep[j, k] <- discFuns[[k]]$run()
-    }
-
-    list(obs = obs, sim = rep)
+    list(obs = obs, sim = sim)
   }
 }
+
+
+#' The draws loop, as a nimbleFunction
+#'
+#' Holds the discrepancies in a `nimbleFunctionList` so they compile together
+#' with the loop that uses them. Not called directly; see
+#' [makeDiscrepancyCalculator()].
+#'
+#' @param model A NIMBLE model.
+#' @param discs List of completed `cppp_discrepancy` objects.
+#' @param dataNodes Nodes the dataset is written into.
+#' @param simNodes Nodes resimulated for a replicate.
+#' @param paramNodes Nodes set from each draw.
+#' @keywords internal
+discrepancyCalculatorNF <- nimbleFunction(
+  setup = function(model, discs, dataNodes, simNodes, paramNodes) {
+
+    ## SP: we get dependencies of parameters because we call calculate after changing values
+    ## of the model parameters. self=FALSE to avoid overriding of deterministic nodes
+    ## (e.g. user monitoring sigma (deterministic) instead of log_sigma (stochastic))
+    paramDeps <- model$getDependencies(paramNodes, self = FALSE)
+    ## After simulating a replicate: the data's own densities and anything below.
+    dataDeps  <- model$getDependencies(dataNodes, self = TRUE)
+    restoreDeps <- model$topologicallySortNodes(unique(c(paramDeps, dataDeps)))
+
+    discList <- nimbleFunctionList(discrepancyBase)
+    for (i in seq_along(discs)) {
+      discList[[i]] <- makeDiscrepancyNimbleFun(model, discs[[i]])
+    }
+    K <- length(discs)
+  },
+  run = function(MCMCOutput = double(2), targetData = double(1)) {
+    nDraws <- dim(MCMCOutput)[1]
+
+    ## results[draw, discrepancy, 1] is the observed side, [, , 2] the
+    ## replicated one.
+    results <- array(0, c(nDraws, K, 2))
+
+    ## SP: we need to leave the model as we found it. Saving once here is
+    ## enough, because every draw overwrites these before reading them.
+    savedData   <- values(model, dataNodes)
+    savedParams <- values(model, paramNodes)
+
+    for (i in 1:nDraws) {
+      values(model, paramNodes) <<- MCMCOutput[i, ]
+      values(model, dataNodes)  <<- targetData
+      model$calculate(paramDeps)
+
+      for (k in 1:K) results[i, k, 1] <- discList[[k]]$run()
+
+      model$simulate(simNodes, includeData = TRUE)
+      model$calculate(dataDeps)
+
+      for (k in 1:K) results[i, k, 2] <- discList[[k]]$run()
+    }
+
+    values(model, dataNodes)  <<- savedData
+    values(model, paramNodes) <<- savedParams
+    model$calculate(restoreDeps)
+
+    returnType(double(3))
+    return(results)
+  }
+)
