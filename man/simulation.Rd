@@ -26,7 +26,7 @@ A simulation specification describes how replicated data should be generated
 from a model when evaluating discrepancies.
 }
 \details{
-The two modes differ in how much of the model is redrawn for a replicate.
+The are two modes:
 \code{"conditional"} holds any latent quantities fixed at the values from the
 posterior draw and resimulates only the data. \code{"marginal"} also redraws the
 latent quantities, so the replicate comes from the model integrated over
