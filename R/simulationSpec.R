@@ -79,9 +79,7 @@ completeSimulation <- function(model, sim) {
       ## Everything that is not data stays at the posterior draw.
       out$simulateNodes <- out$dataNodes
     } else if (out$mode == "marginal") {
-      ## No default: which nodes count as latent is the user's call, and
-      ## guessing it from the parameters gets it silently wrong whenever the
-      ## latent states are themselves among the monitored parameters.
+      ## SP: no default. User must provide latent states
       stop(
         "For `mode = \"marginal\"`, `simulateNodes` must be supplied: list the latent nodes to redraw as well as the data nodes.",
         call. = FALSE
@@ -93,6 +91,8 @@ completeSimulation <- function(model, sim) {
     out$simulateNodes,
     returnScalarComponents = TRUE
   )
+
+  out$simulateNodes <- model$topologicallySortNodes(out$simulateNodes)
 
   out
 }

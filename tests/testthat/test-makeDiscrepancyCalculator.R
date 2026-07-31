@@ -64,6 +64,35 @@ test_that("makeDiscrepancyCalculator() computes the observed side correctly", {
   expect_equal(unname(out$obs[, "deviance"]), expected)
 })
 
+## A parameter can be a derived node: with log(sigma) ~ dflat(), `sigma` is
+## computed from `log_sigma`. Recalculating the whole model would rebuild
+## `sigma` and throw away the value the draw gave us, leaving every draw with
+## the same sigma.
+test_that("makeDiscrepancyCalculator() keeps a derived parameter at its drawn value", {
+  code <- nimbleCode({
+    for (i in 1:n) y[i] ~ dnorm(mu, sd = sigma)
+    mu ~ dflat()
+    log(sigma) ~ dflat()
+  })
+
+  model <- nimbleModel(code, constants = list(n = 3), data = list(y = c(1, 2, 3)),
+                       inits = list(mu = 0, log_sigma = 2))
+  expect_true("sigma" %in% model$getNodeNames(determOnly = TRUE))
+
+  y <- c(1, 2, 3)
+  discFun <- makeDiscrepancyCalculator(model, discrepancy("deviance"),
+                                       simulation("conditional"),
+                                       paramNodes = c("mu", "sigma"))
+
+  MCMCSamples <- cbind(mu = c(0, 0), sigma = c(1, 4))
+  out <- discFun(MCMCSamples, targetData = y)
+
+  ## deviance depends on sigma, so a frozen sigma would give two equal rows
+  expected <- c(-2 * sum(dnorm(y, 0, 1, log = TRUE)),
+                -2 * sum(dnorm(y, 0, 4, log = TRUE)))
+  expect_equal(unname(out$obs[, "deviance"]), expected)
+})
+
 test_that("makeDiscrepancyCalculator() puts the model back as it found it", {
   model <- makeTestModel()
 

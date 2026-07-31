@@ -1,36 +1,48 @@
 #' Build a discrepancy calculator
 #'
-#' Combine what the user wrote — one or more [discrepancy()] specifications and
-#' a [simulation()] specification — into a single function that computes
-#' discrepancy values from the model, for the real data and for a replicate,
-#' one pair per posterior draw.
+#' Turns one or more discrepancy specifications and a simulation specification
+#' into a function that computes discrepancy values from a model. For every
+#' posterior draw it gives the discrepancies of the dataset you supply, and the
+#' discrepancies of a replicate dataset simulated from that draw.
 #'
-#' This is the calculating route: the values are worked out here, after the
-#' MCMC has run. The other route is to have the MCMC compute them as it goes
-#' and read the columns back afterwards. Either way the values are handed on to
-#' [runCalibration()], which is what turns them into a PPP.
+#' The result is what [runCalibration()] and [runCalibrationNIMBLE()] take as
+#' their `discFun` argument. The values are computed after the MCMC has run,
+#' from its stored draws.
 #'
-#' Everything that can be prepared once is prepared here: the node names are
-#' filled in from the model, and one NIMBLE discrepancy function is built per
-#' specification. The function that comes back then only has to loop over the
-#' draws.
+#' Give the calculator its own copy of the model, `model$newModel()`, rather
+#' than one an MCMC is using: it writes parameter values and data into the model
+#' as it works, and puts them back when it is finished.
 #'
-#' For each draw it puts the parameter values into the model, puts the dataset
-#' into the data nodes, evaluates every discrepancy, simulates a replicate,
-#' and evaluates every discrepancy again. The model is left as it was found.
-#'
-#' The model given here is the one the returned function reads and writes. It
-#' does not have to be the model the MCMC runs on, and when running several
-#' calibration worlds at once each one should have its own.
+#' Parameters may be derived nodes — `sigma`, say, when the model puts the prior
+#' on `log(sigma)`. The drawn values are used as they are given.
 #'
 #' @param model A NIMBLE model.
-#' @param discrepancies One `cppp_discrepancy` object or a list of them.
-#' @param simulation A `cppp_simulation` object.
-#' @param paramNodes Character vector of the model nodes set from each draw.
+#' @param discrepancies A [discrepancy()] specification, or a list of them.
+#' @param simulation A [simulation()] specification.
+#' @param paramNodes Character vector naming the model nodes to set from each
+#'   posterior draw. These must appear among the column names of the draws.
 #'
-#' @return A function `function(MCMCSamples, targetData, control, ...)` that
-#'   returns a list with `obs` and `sim`. Both have one row per draw and one
-#'   column per discrepancy, with the discrepancy names as column names.
+#' @return A function of `(MCMCSamples, targetData, control, ...)`, returning a
+#'   list of two matrices: `obs`, the discrepancies of `targetData`, and `sim`,
+#'   those of the replicates. Both have one row per draw and one column per
+#'   discrepancy, named after the discrepancies.
+#'
+#' @seealso [discrepancy()] and [simulation()] for writing the specifications,
+#'   [runCalibrationNIMBLE()] for running a calibration.
+#'
+#' @examples
+#' \dontrun{
+#' calc <- makeDiscrepancyCalculator(
+#'   model         = model$newModel(),
+#'   discrepancies = list(discrepancy("mean"), discrepancy("deviance")),
+#'   simulation    = simulation("conditional"),
+#'   paramNodes    = c("mu", "sigma")
+#' )
+#'
+#' d <- calc(MCMCSamples, targetData = y)
+#' head(d$obs)
+#' colMeans(d$sim >= d$obs)   # posterior predictive p-value per discrepancy
+#' }
 #' @export
 makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes) {
 
@@ -61,6 +73,14 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
            call. = FALSE)
     }
   }
+
+  ## SP: we get dependencies of parameters because we call calculate after changing values
+  ## of the model parameters. self=FALSE to avoid overriding of deterministic nodes
+  ## (e.g. user monitoring sigma (deterministic) instead of log_sigma (stochastic))
+  paramDeps <- model$getDependencies(paramNodes, self = FALSE)
+  ## After simulating a replicate: the data's own densities and anything below.
+  dataDeps  <- model$getDependencies(simSpec$dataNodes, self = TRUE)
+  restoreDeps <- model$topologicallySortNodes(unique(c(paramDeps, dataDeps)))
 
   discFuns <- lapply(discs, function(d) makeDiscrepancyNimbleFun(model, d))
   K <- length(discFuns)
@@ -96,18 +116,18 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     on.exit({
       values(model, simSpec$dataNodes) <- savedData
       values(model, paramNodes)        <- savedParams
-      model$calculate()
+      model$calculate(restoreDeps)
     })
 
     for (j in seq_len(nDraws)) {
       values(model, paramNodes)        <- MCMCSamples[j, paramCols]
       values(model, simSpec$dataNodes) <- targetData
-      model$calculate()
+      model$calculate(paramDeps)
 
       for (k in seq_len(K)) obs[j, k] <- discFuns[[k]]$run()
 
       model$simulate(simSpec$simulateNodes, includeData = TRUE)
-      model$calculate()
+      model$calculate(dataDeps)
 
       for (k in seq_len(K)) rep[j, k] <- discFuns[[k]]$run()
     }
