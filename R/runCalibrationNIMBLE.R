@@ -188,7 +188,7 @@ runCalibrationNIMBLE <- function(
 
   control <- modifyList(defaultControl, control)
 
-  ## 5. call the generic runCalibration functino
+  ## 5. call the generic runCalibration function
   if (verbose) {
     message("Calling runCalibration() with nReps = ", nReps)
   }
