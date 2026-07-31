@@ -9,39 +9,52 @@ makeDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
 \arguments{
 \item{model}{A NIMBLE model.}
 
-\item{discrepancies}{One \code{cppp_discrepancy} object or a list of them.}
+\item{discrepancies}{A \code{\link[=discrepancy]{discrepancy()}} specification, or a list of them.}
 
-\item{simulation}{A \code{cppp_simulation} object.}
+\item{simulation}{A \code{\link[=simulation]{simulation()}} specification.}
 
-\item{paramNodes}{Character vector of the model nodes set from each draw.}
+\item{paramNodes}{Character vector naming the model nodes to set from each
+posterior draw. These must appear among the column names of the draws.}
 }
 \value{
-A function \verb{function(MCMCSamples, targetData, control, ...)} that
-returns a list with \code{obs} and \code{sim}. Both have one row per draw and one
-column per discrepancy, with the discrepancy names as column names.
+A function of \verb{(MCMCSamples, targetData, control, ...)}, returning a
+list of two matrices: \code{obs}, the discrepancies of \code{targetData}, and \code{sim},
+those of the replicates. Both have one row per draw and one column per
+discrepancy, named after the discrepancies.
 }
 \description{
-Combine what the user wrote — one or more \code{\link[=discrepancy]{discrepancy()}} specifications and
-a \code{\link[=simulation]{simulation()}} specification — into a single function that computes
-discrepancy values from the model, for the real data and for a replicate,
-one pair per posterior draw.
+Turns one or more discrepancy specifications and a simulation specification
+into a function that computes discrepancy values from a model. For every
+posterior draw it gives the discrepancies of the dataset you supply, and the
+discrepancies of a replicate dataset simulated from that draw.
 }
 \details{
-This is the calculating route: the values are worked out here, after the
-MCMC has run. The other route is to have the MCMC compute them as it goes
-and read the columns back afterwards. Either way the values are handed on to
-\code{\link[=runCalibration]{runCalibration()}}, which is what turns them into a PPP.
+The result is what \code{\link[=runCalibration]{runCalibration()}} and \code{\link[=runCalibrationNIMBLE]{runCalibrationNIMBLE()}} take as
+their \code{discFun} argument. The values are computed after the MCMC has run,
+from its stored draws.
 
-Everything that can be prepared once is prepared here: the node names are
-filled in from the model, and one NIMBLE discrepancy function is built per
-specification. The function that comes back then only has to loop over the
-draws.
+Give the calculator its own copy of the model, \code{model$newModel()}, rather
+than one an MCMC is using: it writes parameter values and data into the model
+as it works, and puts them back when it is finished.
 
-For each draw it puts the parameter values into the model, puts the dataset
-into the data nodes, evaluates every discrepancy, simulates a replicate,
-and evaluates every discrepancy again. The model is left as it was found.
+Parameters may be derived nodes — \code{sigma}, say, when the model puts the prior
+on \code{log(sigma)}. The drawn values are used as they are given.
+}
+\examples{
+\dontrun{
+calc <- makeDiscrepancyCalculator(
+  model         = model$newModel(),
+  discrepancies = list(discrepancy("mean"), discrepancy("deviance")),
+  simulation    = simulation("conditional"),
+  paramNodes    = c("mu", "sigma")
+)
 
-The model given here is the one the returned function reads and writes. It
-does not have to be the model the MCMC runs on, and when running several
-calibration worlds at once each one should have its own.
+d <- calc(MCMCSamples, targetData = y)
+head(d$obs)
+colMeans(d$sim >= d$obs)   # posterior predictive p-value per discrepancy
+}
+}
+\seealso{
+\code{\link[=discrepancy]{discrepancy()}} and \code{\link[=simulation]{simulation()}} for writing the specifications,
+\code{\link[=runCalibrationNIMBLE]{runCalibrationNIMBLE()}} for running a calibration.
 }
