@@ -3,6 +3,7 @@
 export(computeCppp)
 export(discrepancy)
 export(makeColDiscFun)
+export(makeDiscrepancyCalculator)
 export(makeDiscrepancyNimbleFun)
 export(makeOfflineDiscFun)
 export(newCpppResult)

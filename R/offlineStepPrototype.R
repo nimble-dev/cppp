@@ -19,7 +19,7 @@ runOneDiscrepancyStepR <- function(model,
                                    thetaRow = NULL,
                                    paramNodes = NULL) {
   disc <- completeDiscrepancy(model, disc)
-  sim <- completeSimulation(model, sim, paramNodes)
+  sim <- completeSimulation(model, sim)
   ## The NIMBLE discrepancy is the single source of truth; run it uncompiled
   ## here. It reads the model's current state, so we set the state first and
   ## then call its run() method.
