@@ -12,9 +12,8 @@ test_that("simulation() creates a basic simulation spec", {
   expect_null(sim$simulateNodes)
 })
 
-## In marginal mode we need to know the parameters, unless the user has already
-## said which nodes to resimulate.
-test_that("completeSimulation() needs paramNodes or simulateNodes in marginal mode", {
+## In marginal mode the user says which nodes to resimulate; there is no default.
+test_that("completeSimulation() requires simulate nodes in marginal mode", {
   code <- nimbleCode({
     for (i in 1:n) {
       y[i] ~ dnorm(mu, sd = 1)
@@ -31,7 +30,7 @@ test_that("completeSimulation() needs paramNodes or simulateNodes in marginal mo
 
   expect_error(
     completeSimulation(model, simulation(mode = "marginal")),
-    "paramNodes"
+    "simulateNodes"
   )
 
   sim <- simulation(mode = "marginal", simulateNodes = "y")
@@ -42,8 +41,8 @@ test_that("completeSimulation() needs paramNodes or simulateNodes in marginal mo
   expect_equal(out$simulateNodes, model$expandNodeNames("y", returnScalarComponents = TRUE))
 })
 
-## The point of marginal mode: latent nodes are redrawn too, not just the data.
-test_that("completeSimulation() works out marginal simulate nodes from paramNodes", {
+## The difference between the two modes, on a model with latent effects.
+test_that("marginal redraws the latent nodes the user names, conditional does not", {
   code <- nimbleCode({
     for (i in 1:n) {
       b[i] ~ dnorm(0, sd = tau)
@@ -60,26 +59,15 @@ test_that("completeSimulation() works out marginal simulate nodes from paramNode
     inits = list(mu = 0, tau = 1, b = rep(0, 3))
   )
 
-  paramNodes <- c("mu", "tau")
+  bNodes <- model$expandNodeNames("b", returnScalarComponents = TRUE)
 
-  marg <- completeSimulation(model, simulation(mode = "marginal"), paramNodes)
-  cond <- completeSimulation(model, simulation(mode = "conditional"), paramNodes)
+  marg <- completeSimulation(model, simulation(mode = "marginal",
+                                               simulateNodes = c("b", "y")))
+  cond <- completeSimulation(model, simulation(mode = "conditional"))
 
-  expected <- model$expandNodeNames(c("b", "y"), returnScalarComponents = TRUE)
-  expect_setequal(marg$simulateNodes, expected)
-
-  ## conditional keeps the latent effects fixed; marginal does not
-  expect_setequal(cond$simulateNodes, cond$dataNodes)
-  expect_true(all(model$expandNodeNames("b", returnScalarComponents = TRUE) %in%
-                    marg$simulateNodes))
-  expect_false(any(model$expandNodeNames("b", returnScalarComponents = TRUE) %in%
-                     cond$simulateNodes))
-
-  ## parents come before children, so simulating in this order is safe
-  expect_lt(
-    max(match(model$expandNodeNames("b", returnScalarComponents = TRUE), marg$simulateNodes)),
-    min(match(model$expandNodeNames("y", returnScalarComponents = TRUE), marg$simulateNodes))
-  )
+  expect_true(all(bNodes %in% marg$simulateNodes))
+  expect_false(any(bNodes %in% cond$simulateNodes))
+  expect_equal(cond$simulateNodes, cond$dataNodes)
 })
 
 ## In conditional mode, the default is to simulate only the data nodes.
