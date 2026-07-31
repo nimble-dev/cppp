@@ -46,6 +46,7 @@ sortR <- nimbleRcall(prototype  = function(x = double(1)) {},
                      returnType = double(1))
 
 asymmDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {},
   run = function() {
     y  <- values(model, dataNodes)
@@ -70,14 +71,16 @@ samples     <- nimbleMCMC(newcombModel, niter = 5000, nburnin = 1000,
                           monitors = paramNames)
 MCMCSamples <- as.matrix(samples)
 
-## The discrepancies run uncompiled, so thin the draws while exploring.
+## Thinned only to keep this example quick; the discrepancies are compiled, so
+## the full set of draws is affordable too.
 thinned <- MCMCSamples[seq(1, nrow(MCMCSamples), by = 20), , drop = FALSE]
 
 ############################################################
 ## Stage 1: the calculator on its own, before any calibration
 ############################################################
 
-## Its own copy of the model: it writes into the model as it works.
+## Its own copy of the model: it writes into the model as it works. This
+## compiles the model and the two discrepancies, which takes a moment once.
 calc <- makeDiscrepancyCalculator(
   model         = newcombModel$newModel(),
   discrepancies = discs,

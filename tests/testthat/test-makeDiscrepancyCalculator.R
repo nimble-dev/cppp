@@ -19,6 +19,10 @@ makeTestModel <- function() {
   )
 }
 
+## Most tests below use compile = FALSE so the suite does not pay for C++
+## compilation each time. One test further down checks that compiling gives
+## the same answers.
+
 test_that("makeDiscrepancyCalculator() gives one column per discrepancy", {
   model <- makeTestModel()
 
@@ -26,7 +30,8 @@ test_that("makeDiscrepancyCalculator() gives one column per discrepancy", {
     model,
     discrepancies = list(discrepancy("mean"), discrepancy("deviance")),
     simulation    = simulation("conditional"),
-    paramNodes    = "mu"
+    paramNodes    = "mu",
+    compile       = FALSE
   )
 
   MCMCSamples <- matrix(c(0, 0.5, 1), ncol = 1, dimnames = list(NULL, "mu"))
@@ -49,7 +54,8 @@ test_that("makeDiscrepancyCalculator() computes the observed side correctly", {
     model,
     discrepancies = list(discrepancy("mean"), discrepancy("deviance")),
     simulation    = simulation("conditional"),
-    paramNodes    = "mu"
+    paramNodes    = "mu",
+    compile       = FALSE
   )
 
   mu <- c(0, 0.5, 1)
@@ -82,7 +88,8 @@ test_that("makeDiscrepancyCalculator() keeps a derived parameter at its drawn va
   y <- c(1, 2, 3)
   discFun <- makeDiscrepancyCalculator(model, discrepancy("deviance"),
                                        simulation("conditional"),
-                                       paramNodes = c("mu", "sigma"))
+                                       paramNodes = c("mu", "sigma"),
+                                       compile = FALSE)
 
   MCMCSamples <- cbind(mu = c(0, 0), sigma = c(1, 4))
   out <- discFun(MCMCSamples, targetData = y)
@@ -97,7 +104,8 @@ test_that("makeDiscrepancyCalculator() puts the model back as it found it", {
   model <- makeTestModel()
 
   discFun <- makeDiscrepancyCalculator(model, discrepancy("mean"),
-                             simulation("conditional"), paramNodes = "mu")
+                                       simulation("conditional"),
+                                       paramNodes = "mu", compile = FALSE)
 
   yBefore  <- values(model, "y")
   muBefore <- values(model, "mu")
@@ -115,21 +123,23 @@ test_that("makeDiscrepancyCalculator() complains instead of returning wrong numb
   ## a discrepancy reading data the simulation never writes
   expect_error(
     makeDiscrepancyCalculator(model,
-                    discrepancy("mean"),                       # all of y
-                    simulation("conditional", dataNodes = "y[1:2]"),
-                    paramNodes = "mu"),
+                              discrepancy("mean"),                # all of y
+                              simulation("conditional", dataNodes = "y[1:2]"),
+                              paramNodes = "mu", compile = FALSE),
     "does not set"
   )
 
   ## two columns that would both be called "mean"
   expect_error(
     makeDiscrepancyCalculator(model, list(discrepancy("mean"), discrepancy("mean")),
-                    simulation("conditional"), paramNodes = "mu"),
+                              simulation("conditional"),
+                              paramNodes = "mu", compile = FALSE),
     "own name"
   )
 
   discFun <- makeDiscrepancyCalculator(model, discrepancy("mean"),
-                             simulation("conditional"), paramNodes = "mu")
+                                       simulation("conditional"),
+                                       paramNodes = "mu", compile = FALSE)
 
   ## draws with no column for mu
   expect_error(
@@ -144,4 +154,31 @@ test_that("makeDiscrepancyCalculator() complains instead of returning wrong numb
             targetData = c(1, 2)),
     "one value per data node"
   )
+})
+
+test_that("makeDiscrepancyCalculator() needs an uncompiled model", {
+  model  <- makeTestModel()
+  cmodel <- compileNimble(model)
+
+  expect_error(
+    makeDiscrepancyCalculator(cmodel, discrepancy("mean"),
+                              simulation("conditional"), paramNodes = "mu"),
+    "uncompiled"
+  )
+})
+
+## The slow one: compiling must not change the answers. The observed side has
+## no randomness in it, so it can be compared value for value.
+test_that("compiled and uncompiled calculators agree on the observed side", {
+  y <- c(1, 2, 3, 4)
+  MCMCSamples <- matrix(c(0, 0.5, 1), ncol = 1, dimnames = list(NULL, "mu"))
+  discs <- list(discrepancy("mean"), discrepancy("deviance"))
+
+  slow <- makeDiscrepancyCalculator(makeTestModel(), discs, simulation("conditional"),
+                                    paramNodes = "mu", compile = FALSE)
+  fast <- makeDiscrepancyCalculator(makeTestModel(), discs, simulation("conditional"),
+                                    paramNodes = "mu", compile = TRUE)
+
+  expect_equal(fast(MCMCSamples, targetData = y)$obs,
+               slow(MCMCSamples, targetData = y)$obs)
 })
