@@ -2,8 +2,9 @@
 ## Built-in discrepancies
 ############################################################
 ##
-## Every discrepancy (built-in or user supplied) is a nimbleFunction whose
-## setup takes three arguments, in this order:
+## Every discrepancy (built-in or user supplied) is a nimbleFunction that
+## declares `contains = discrepancyBase`, whose setup takes three arguments,
+## in this order:
 ##
 ##     setup = function(model, dataNodes, modelNodes)
 ##
@@ -18,9 +19,44 @@
 ## A discrepancy that needs particular nodes checks for them in its own setup
 ## code (which is ordinary R), so the requirement lives with the discrepancy
 ## instead of in a separate table.
+##
+## `discrepancyBase` is defined here, above the built-ins that use it, so that
+## nothing depends on the order in which R loads the package's files.
+
+
+#' The shape every discrepancy has
+#'
+#' A discrepancy is a nimbleFunction whose `run()` takes no arguments and
+#' returns a single number. Declaring `contains = discrepancyBase` is what lets
+#' the package hold several discrepancies together and compile them in one go.
+#'
+#' Write your own like this:
+#'
+#' ```
+#' myDisc <- nimbleFunction(
+#'   contains = discrepancyBase,
+#'   setup = function(model, dataNodes, modelNodes) {},
+#'   run = function() {
+#'     returnType(double(0))
+#'     return(min(values(model, dataNodes)))
+#'   }
+#' )
+#' ```
+#'
+#' Then name it with [discrepancy()]: `discrepancy("min", fun = myDisc)`.
+#'
+#' @return A nimbleFunctionVirtual, used as the `contains` argument.
+#' @seealso [discrepancy()], [discrepancyBuiltins]
+#' @export
+discrepancyBase <- nimbleFunctionVirtual(
+  run = function() {
+    returnType(double(0))
+  }
+)
 
 #' @keywords internal
 meanDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {},
   run = function() {
     returnType(double(0))
@@ -30,6 +66,7 @@ meanDisc <- nimbleFunction(
 
 #' @keywords internal
 varianceDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {},
   run = function() {
     returnType(double(0))
@@ -39,6 +76,7 @@ varianceDisc <- nimbleFunction(
 
 #' @keywords internal
 devianceDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {},
   run = function() {
     returnType(double(0))
@@ -49,6 +87,7 @@ devianceDisc <- nimbleFunction(
 
 #' @keywords internal
 chisquaredDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {
     if (length(modelNodes) != length(dataNodes)) {
       stop("Discrepancy 'chisquared' requires `modelNodes` matching `dataNodes` in length.",
@@ -65,6 +104,7 @@ chisquaredDisc <- nimbleFunction(
 
 #' @keywords internal
 freemantukeyDisc <- nimbleFunction(
+  contains = discrepancyBase,
   setup = function(model, dataNodes, modelNodes) {
     if (length(modelNodes) != length(dataNodes)) {
       stop("Discrepancy 'freemantukey' requires `modelNodes` matching `dataNodes` in length.",

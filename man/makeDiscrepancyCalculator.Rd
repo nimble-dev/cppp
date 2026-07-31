@@ -4,7 +4,13 @@
 \alias{makeDiscrepancyCalculator}
 \title{Build a discrepancy calculator}
 \usage{
-makeDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
+makeDiscrepancyCalculator(
+  model,
+  discrepancies,
+  simulation,
+  paramNodes,
+  compile = TRUE
+)
 }
 \arguments{
 \item{model}{A NIMBLE model.}
@@ -15,6 +21,8 @@ makeDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
 
 \item{paramNodes}{Character vector naming the model nodes to set from each
 posterior draw. These must appear among the column names of the draws.}
+
+\item{compile}{Compile the model and the discrepancies? \code{TRUE} by default.}
 }
 \value{
 A function of \verb{(MCMCSamples, targetData, control, ...)}, returning a
@@ -35,7 +43,14 @@ from its stored draws.
 
 Give the calculator its own copy of the model, \code{model$newModel()}, rather
 than one an MCMC is using: it writes parameter values and data into the model
-as it works, and puts them back when it is finished.
+as it works, and puts them back when it is finished. The model must be
+uncompiled — the calculator compiles its own copy.
+
+By default the discrepancies are compiled, which takes a little time once and
+then runs far faster over the draws. Anything you write yourself has to be
+code NIMBLE can compile; to use an R function, wrap it with
+\code{\link[nimble:nimbleRcall]{nimble::nimbleRcall()}}. Set \code{compile = FALSE} for a quick check without
+waiting for compilation.
 
 Parameters may be derived nodes — \code{sigma}, say, when the model puts the prior
 on \code{log(sigma)}. The drawn values are used as they are given.
