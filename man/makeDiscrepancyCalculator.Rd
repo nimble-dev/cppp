@@ -51,9 +51,6 @@ then runs far faster over the draws. Anything you write yourself has to be
 code NIMBLE can compile; to use an R function, wrap it with
 \code{\link[nimble:nimbleRcall]{nimble::nimbleRcall()}}. Set \code{compile = FALSE} for a quick check without
 waiting for compilation.
-
-Parameters may be derived nodes — \code{sigma}, say, when the model puts the prior
-on \code{log(sigma)}. The drawn values are used as they are given.
 }
 \examples{
 \dontrun{

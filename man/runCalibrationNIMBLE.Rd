@@ -9,8 +9,10 @@ runCalibrationNIMBLE(
   dataNames = NULL,
   paramNames = NULL,
   MCMCSamples = NULL,
-  discFun,
-  simulateNewDataFun,
+  discrepancies = NULL,
+  simulation = NULL,
+  discFun = NULL,
+  simulateNewDataFun = NULL,
   nReps = 100,
   MCMCcontrolMain = list(niter = 5000, nburnin = 1000, thin = 1),
   MCMCcontrolRep = list(niter = 500, nburnin = 0, thin = 1),
@@ -21,7 +23,7 @@ runCalibrationNIMBLE(
 )
 }
 \arguments{
-\item{model}{either an uncompiled or compiled nimbleModel with observed data set.}
+\item{model}{either an uncompiled or compiled nimbleModel, initialized with observed data.}
 
 \item{dataNames}{Optional character vector of data node names. If NULL,
 nodes flagged as data in the model are used.}
@@ -34,9 +36,16 @@ If provided, \code{runCalibrationNIMBLE()} skips the main MCMC run and uses thes
 draws as the posterior sample input to \code{runCalibration()}. The matrix must contain columns
 corresponding to the expanded parameter nodes from \code{paramNames}.}
 
-\item{discFun}{Function \verb{function(MCMCSamples, targetData, control)} that returns \code{list(obs, sim)} with one discrepancy value per posterior draw of \code{MCMCSamples}.}
+\item{discrepancies}{A \code{\link[=discrepancy]{discrepancy()}} specification, or a list of them. Give
+these and the discrepancy calculator is built for you, instead of passing
+\code{discFun}.}
 
-\item{simulateNewDataFun}{Function \verb{function(thetaRow, control)} that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.}
+\item{simulation}{A \code{\link[=simulation]{simulation()}} specification, saying how a replicate
+dataset is generated. Defaults to \code{simulation("conditional")}.}
+
+\item{discFun}{Function \verb{function(MCMCSamples, targetData, control)} that returns \code{list(obs, sim)} with one discrepancy value per posterior draw of \code{MCMCSamples}. Supply this or \code{discrepancies}, not both.}
+
+\item{simulateNewDataFun}{Function \verb{function(thetaRow, control)} that  simulates one replicated dataset from the posterior predictive. Optional when \code{discrepancies} is given: it is then built from \code{simulation}. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.}
 
 \item{nReps}{Number of calibration replications.}
 

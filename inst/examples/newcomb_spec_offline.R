@@ -36,8 +36,6 @@ newcombModel <- nimbleModel(
 
 dataNames  <- "y"
 paramNames <- c("mu", "sigma")
-## Note sigma is a derived node here, since the prior is on log(sigma). The
-## calculator uses the sampled sigma as given.
 
 ## 3) Your own discrepancy: asymmetry of the two tails around mu.
 ##    Wrap R's sort() so the same code also works once compiled.
@@ -71,8 +69,7 @@ samples     <- nimbleMCMC(newcombModel, niter = 5000, nburnin = 1000,
                           monitors = paramNames)
 MCMCSamples <- as.matrix(samples)
 
-## Thinned only to keep this example quick; the discrepancies are compiled, so
-## the full set of draws is affordable too.
+## Thinned only to keep this example quick;
 thinned <- MCMCSamples[seq(1, nrow(MCMCSamples), by = 20), , drop = FALSE]
 
 ############################################################
