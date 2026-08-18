@@ -1,6 +1,6 @@
 #' Run calibration using a NIMBLE model
 #'
-#' @param model either an uncompiled or compiled nimbleModel with observed data set.
+#' @param model either an uncompiled or compiled nimbleModel, initialized with observed data.
 #' @param dataNames Optional character vector of data node names. If NULL,
 #'   nodes flagged as data in the model are used.
 #' @param paramNames Optional character vector of parameter node names to monitor.
@@ -10,8 +10,13 @@
 #'   If provided, `runCalibrationNIMBLE()` skips the main MCMC run and uses these
 #'   draws as the posterior sample input to `runCalibration()`. The matrix must contain columns
 #'   corresponding to the expanded parameter nodes from `paramNames`.
-#' @param discFun Function `function(MCMCSamples, targetData, control)` that returns `list(obs, sim)` with one discrepancy value per posterior draw of `MCMCSamples`.
-#' @param simulateNewDataFun Function `function(thetaRow, control)` that  simulates one replicated dataset from the posterior predictive. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.
+#' @param discrepancies A [discrepancy()] specification, or a list of them. Give
+#'   these and the discrepancy calculator is built for you, instead of passing
+#'   `discFun`.
+#' @param simulation A [simulation()] specification, saying how a replicate
+#'   dataset is generated. Defaults to `simulation("conditional")`.
+#' @param discFun Function `function(MCMCSamples, targetData, control)` that returns `list(obs, sim)` with one discrepancy value per posterior draw of `MCMCSamples`. Supply this or `discrepancies`, not both.
+#' @param simulateNewDataFun Function `function(thetaRow, control)` that  simulates one replicated dataset from the posterior predictive. Optional when `discrepancies` is given: it is then built from `simulation`. SP: We assume that new data is sampled from the posterior predictive of the model. In principle we may want to consider sampling from the prior predictive.
 #' @param nReps Number of calibration replications.
 #' @param MCMCcontrolMain List with `niter`, `nburnin`, `thin` for main chain.
 #' @param MCMCcontrolRep List with `niter`, `nburnin`, `thin` for calibration chains.
@@ -26,8 +31,10 @@ runCalibrationNIMBLE <- function(
     dataNames    = NULL,
     paramNames   = NULL,
     MCMCSamples  = NULL,
-    discFun,
-    simulateNewDataFun,
+    discrepancies = NULL,
+    simulation    = NULL,
+    discFun = NULL,
+    simulateNewDataFun = NULL,
     nReps       = 100,
     MCMCcontrolMain = list(niter = 5000, nburnin = 1000, thin = 1),
     MCMCcontrolRep  = list(niter = 500,  nburnin = 0,    thin = 1),
@@ -60,6 +67,47 @@ runCalibrationNIMBLE <- function(
   paramNodes <- model$expandNodeNames(paramNames, returnScalarComponents = TRUE)
   if (length(paramNodes) == 0) {
     stop("paramNames did not match to any stochastic non-data nodes.")
+  }
+
+  ## 0. Build the discrepancy calculator from specifications, if given.
+  if (!is.null(discrepancies)) {
+    if (!is.null(discFun)) {
+      stop("Give either `discrepancies` or `discFun`, not both.", call. = FALSE)
+    }
+    ## Named apart from the `simulation` argument so it is clear which is which.
+    simSpec <- if (is.null(simulation)) simulation("conditional") else simulation
+
+    ## The dataset written into the model, the one read back out, and the one
+    ## the engine treats as observed all have to be the same nodes. Take
+    ## `dataNames` as the answer unless the specification says otherwise.
+    if (is.null(simSpec$dataNodes)) simSpec$dataNodes <- dataNames
+
+    ## The calculator needs its own copy of the model
+    baseModel <- if (inherits(model, "CmodelBaseClass")) model$Rmodel else model
+
+    discFun <- makeDiscrepancyCalculator(
+      model         = baseModel$newModel(),
+      discrepancies = discrepancies,
+      simulation    = simSpec,
+      paramNodes    = paramNodes
+    )
+
+    ## And the replicate-simulating function, from the same specification.
+    if (missing(simulateNewDataFun) || is.null(simulateNewDataFun)) {
+      simulateNewDataFun <- makeSimulateNewDataFun(
+        model      = baseModel$newModel(),
+        simulation = simSpec,
+        paramNodes = paramNodes
+      )
+    }
+  }
+
+  if (is.null(discFun)) {
+    stop("Supply `discrepancies` (recommended) or `discFun`.", call. = FALSE)
+  }
+  if (is.null(simulateNewDataFun)) {
+    stop("Supply `simulateNewDataFun`, or `discrepancies` so it can be built for you.",
+         call. = FALSE)
   }
 
   ## check if the model is compiled model
