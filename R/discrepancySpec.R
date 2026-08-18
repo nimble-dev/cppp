@@ -1,10 +1,10 @@
 #' Create a discrepancy specification
 #'
-#' A discrepancy specification is simply a list containing the description of a
+#' A discrepancy specification is a list containing the description of a
 #' discrepancy. The package can use it to complete missing defaults from a model
 #' and build a NIMBLE implementation from the completed specification.
 #'
-#' There is one way to define a discrepancy: a nimbleFunction whose setup takes
+#' A discrepancy is a nimbleFunction whose setup takes
 #' `(model, dataNodes, modelNodes)` and whose `run()` reads the model's current
 #' state and returns a single number. The package ships a few such functions
 #' (see [discrepancyBuiltins]); naming one of them is a shortcut for supplying
