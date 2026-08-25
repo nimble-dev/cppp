@@ -51,7 +51,9 @@
 #'
 #'   This structure allows backend-specific state (such as NIMBLE models
 #'   and compiled MCMC objects) to be cleanly separated while remaining
-#'   backward compatible with simpler uses.#' @param ... Not used currently.
+#'   backward compatible with simpler uses.
+#'
+#' @param ... Not used currently.
 #'
 #' @return a list (future `S3` class `cpppResult` objects) containing the CPPP, observed and replicated repPPP, observed discrepancies and replicated discrepancies.
 #' @export

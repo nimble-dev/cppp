@@ -71,7 +71,9 @@ calculation (e.g., model objects, node names).}
 
 This structure allows backend-specific state (such as NIMBLE models
 and compiled MCMC objects) to be cleanly separated while remaining
-backward compatible with simpler uses.#' @param ... Not used currently.}
+backward compatible with simpler uses.}
+
+\item{...}{Not used currently.}
 }
 \value{
 a list (future \code{S3} class \code{cpppResult} objects) containing the CPPP, observed and replicated repPPP, observed discrepancies and replicated discrepancies.
