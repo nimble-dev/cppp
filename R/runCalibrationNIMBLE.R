@@ -207,13 +207,6 @@ runCalibrationNIMBLE <- function(
     as.matrix(repMCMC)
   }
 
-  if (verbose) {
-    message("modifint the control for runCalibration:")
-    message("  mcmc fields: ", paste(names(control$mcmc), collapse = ", "))
-    message("  disc fields: ", paste(names(control$disc), collapse = ", "))
-    message("  draw fields: ", paste(names(control$draw), collapse = ", "))
-  }
-
   defaultControl <- list(
     mcmc = MCMCcontrolRep,
     ## SP: it may be helful to pass the nodes
@@ -226,11 +219,6 @@ runCalibrationNIMBLE <- function(
       paramNames = paramNames,
       paramNodes = paramNodes
     ),
-    # disc = list(
-    #   model      = model,
-    #   dataNames  = dataNames,
-    #   paramNames = paramNames
-    # ),
     draw = list()
   )
 
