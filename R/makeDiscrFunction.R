@@ -1,31 +1,3 @@
-#' Discrepancy extractor (online)
-#'
-#' Returns a `discFun` that reads already-computed discrepancy columns
-#' (observed vs replicated) from the MCMC output and returns them for use
-#' in `runCalibration()`, which computes the PPP.
-#'
-#' @param colObs Character. Column name for observed discrepancies.
-#' @param colSim Character. Column name for replicated discrepancies.
-#'
-#' @return A function `function(MCMCSamples, newData, ...)` that returns
-#'   `list(obs = <numeric>, sim = <numeric>)` with equal lengths.
-#'
-#' @export
-
-makeColDiscFun <- function(colObs = "discrepancy_model",
-                             colSim = "discrepancy_simulated") {
-  function(MCMCSamples, ...) {
-    ## check that the discrepancy columns are in the samples
-    if (!all(c(colObs, colSim) %in% colnames(MCMCSamples))) {
-      stop(sprintf("Columns '%s' and/or '%s' not found in new_samples.", colObs, colSim))
-    }
-    list(
-      obs = as.numeric(MCMCSamples[, colObs]),
-      sim = as.numeric(MCMCSamples[, colSim])
-    )
-  }
-}
-
 #' Make offline discrepancy function
 #'
 #' Creates a `discFun` that computes observed and replicated discrepancies

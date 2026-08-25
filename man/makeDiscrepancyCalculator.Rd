@@ -48,11 +48,6 @@ directly, to inspect discrepancy values before running a calibration.
 \code{model} must be uncompiled, and should be an instance not in use elsewhere,
 such as \code{model$newModel()}, since the calculator writes parameter values and
 data into it.
-
-When \code{compile = TRUE} the model, the loop over draws and all discrepancies
-are compiled in a single call. User-supplied discrepancies must therefore be
-expressible in the NIMBLE language; an R function may be used within one via
-\code{\link[nimble:nimbleRcall]{nimble::nimbleRcall()}}.
 }
 \examples{
 \dontrun{

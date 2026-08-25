@@ -18,11 +18,6 @@
 #' such as `model$newModel()`, since the calculator writes parameter values and
 #' data into it.
 #'
-#' When `compile = TRUE` the model, the loop over draws and all discrepancies
-#' are compiled in a single call. User-supplied discrepancies must therefore be
-#' expressible in the NIMBLE language; an R function may be used within one via
-#' [nimble::nimbleRcall()].
-#'
 #' @param model A NIMBLE model.
 #' @param discrepancies A [discrepancy()] specification, or a list of them.
 #' @param simulation A [simulation()] specification.
