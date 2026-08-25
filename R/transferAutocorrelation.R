@@ -1,27 +1,3 @@
-# R/Rfunctions.R
-
-#' Compute the calibrated posterior predictive p-value
-#'
-#' @param obsPPP Numeric scalar in \eqn{[0,1]}. The observed PPP.
-#' @param repPPP Numeric vector in \eqn{[0,1]}. PPPs from calibration datasets.
-#'
-#' @return Numeric scalar in \eqn{[0,1]}, the calibrated PPP.
-#' @export
-computeCppp <- function(obsPPP, repPPP) {
-  # basic validation
-  if (!is.numeric(obsPPP) || length(obsPPP) != 1L)
-    stop("obsPPP must be a numeric scalar.", call. = FALSE)
-  if (!is.numeric(repPPP))
-    stop("repPPP must be numeric.", call. = FALSE)
-
-  # handle empty vector as NA ??
-  if (length(repPPP) == 0L)
-    return(NA_real_)
-
-  mean(repPPP <= obsPPP)
-}
-
-
 #' Estimate transfer autocorrelation (placeholder)
 #'
 #' Placeholder for the function that will estimate the transfer
