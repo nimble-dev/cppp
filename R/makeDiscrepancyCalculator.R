@@ -1,24 +1,27 @@
 #' Build a discrepancy calculator
 #'
-#' Turns one or more discrepancy specifications and a simulation specification
-#' into a function that computes discrepancy values from a model. For every
-#' posterior draw it gives the discrepancies of the dataset you supply, and the
-#' discrepancies of a replicate dataset simulated from that draw.
+#' Create a function that computes observed and replicated discrepancy values
+#' for a set of posterior draws, from discrepancy and simulation
+#' specifications.
 #'
-#' The result is what [runCalibration()] and [runCalibrationNIMBLE()] take as
-#' their `discFun` argument. The values are computed after the MCMC has run,
-#' from its stored draws.
+#' @details
+#' For each posterior draw, the returned function sets the parameter nodes,
+#' writes the supplied dataset into the data nodes, evaluates every
+#' discrepancy, simulates a replicate dataset, and evaluates every discrepancy
+#' again. The model is restored to its original state on completion.
 #'
-#' Give the calculator its own copy of the model, `model$newModel()`, rather
-#' than one an MCMC is using: it writes parameter values and data into the model
-#' as it works, and puts them back when it is finished. The model must be
-#' uncompiled — the calculator compiles its own copy.
+#' The returned function is suitable as the `discFun` argument of
+#' [runCalibration()] and [runCalibrationNIMBLE()]. It may also be called
+#' directly, to inspect discrepancy values before running a calibration.
 #'
-#' By default the discrepancies are compiled, which takes a little time once and
-#' then runs far faster over the draws. Anything you write yourself has to be
-#' code NIMBLE can compile; to use an R function, wrap it with
-#' [nimble::nimbleRcall()]. Set `compile = FALSE` for a quick check without
-#' waiting for compilation.
+#' `model` must be uncompiled, and should be an instance not in use elsewhere,
+#' such as `model$newModel()`, since the calculator writes parameter values and
+#' data into it.
+#'
+#' When `compile = TRUE` the model, the loop over draws and all discrepancies
+#' are compiled in a single call. User-supplied discrepancies must therefore be
+#' expressible in the NIMBLE language; an R function may be used within one via
+#' [nimble::nimbleRcall()].
 #'
 #' @param model A NIMBLE model.
 #' @param discrepancies A [discrepancy()] specification, or a list of them.
@@ -137,11 +140,15 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
 }
 
 
-#' The draws loop, as a nimbleFunction
+#' Compute discrepancies for every posterior draw
 #'
-#' Holds the discrepancies in a `nimbleFunctionList` so they compile together
-#' with the loop that uses them. Not called directly; see
-#' [makeDiscrepancyCalculator()].
+#' The work behind [makeDiscrepancyCalculator()]. For each draw it sets the
+#' parameters, evaluates every discrepancy on the dataset, simulates a
+#' replicate, and evaluates them again.
+#'
+#' Written as a nimbleFunction so the loop runs in compiled code, and so the
+#' discrepancies (held in a `nimbleFunctionList`) compile together with it in
+#' a single call. Not called directly.
 #'
 #' @param model A NIMBLE model.
 #' @param discs List of completed `cppp_discrepancy` objects.

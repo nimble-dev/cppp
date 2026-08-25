@@ -2,7 +2,7 @@
 % Please edit documentation in R/makeDiscrepancyCalculator.R
 \name{discrepancyCalculatorNF}
 \alias{discrepancyCalculatorNF}
-\title{The draws loop, as a nimbleFunction}
+\title{Compute discrepancies for every posterior draw}
 \usage{
 discrepancyCalculatorNF(model, discs, dataNodes, simNodes, paramNodes)
 }
@@ -18,8 +18,13 @@ discrepancyCalculatorNF(model, discs, dataNodes, simNodes, paramNodes)
 \item{paramNodes}{Nodes set from each draw.}
 }
 \description{
-Holds the discrepancies in a \code{nimbleFunctionList} so they compile together
-with the loop that uses them. Not called directly; see
-\code{\link[=makeDiscrepancyCalculator]{makeDiscrepancyCalculator()}}.
+The work behind \code{\link[=makeDiscrepancyCalculator]{makeDiscrepancyCalculator()}}. For each draw it sets the
+parameters, evaluates every discrepancy on the dataset, simulates a
+replicate, and evaluates them again.
+}
+\details{
+Written as a nimbleFunction so the loop runs in compiled code, and so the
+discrepancies (held in a \code{nimbleFunctionList}) compile together with it in
+a single call. Not called directly.
 }
 \keyword{internal}

@@ -18,10 +18,8 @@ A function \verb{function(thetaRow, control = NULL, ...)} returning the
 replicate dataset as a numeric vector, one value per data node.
 }
 \description{
-A calibration needs a replicate dataset for each of its worlds: take one
-posterior draw, put it into the model, and simulate. That is what the
-\code{\link[=simulation]{simulation()}} specification already describes, so it can be built rather
-than written by hand.
+Builds the function that makes one replicate dataset from one posterior draw,
+following a \code{\link[=simulation]{simulation()}} specification.
 }
 \details{
 Give it its own copy of the model, \code{model$newModel()}. It writes parameter
@@ -30,3 +28,4 @@ values into the model and simulates into the data nodes.
 \seealso{
 \code{\link[=makeDiscrepancyCalculator]{makeDiscrepancyCalculator()}}, \code{\link[=runCalibrationNIMBLE]{runCalibrationNIMBLE()}}
 }
+\keyword{internal}

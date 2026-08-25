@@ -1,9 +1,7 @@
 #' Build a function that simulates one replicate dataset
 #'
-#' A calibration needs a replicate dataset for each of its worlds: take one
-#' posterior draw, put it into the model, and simulate. That is what the
-#' [simulation()] specification already describes, so it can be built rather
-#' than written by hand.
+#' Builds the function that makes one replicate dataset from one posterior draw,
+#' following a [simulation()] specification.
 #'
 #' Give it its own copy of the model, `model$newModel()`. It writes parameter
 #' values into the model and simulates into the data nodes.
@@ -15,16 +13,14 @@
 #' @return A function `function(thetaRow, control = NULL, ...)` returning the
 #'   replicate dataset as a numeric vector, one value per data node.
 #' @seealso [makeDiscrepancyCalculator()], [runCalibrationNIMBLE()]
-#' @export
+#' @keywords internal
 makeSimulateNewDataFun <- function(model, simulation, paramNodes) {
 
   simSpec    <- completeSimulation(model, simulation)
   paramNodes <- model$expandNodeNames(paramNodes, returnScalarComponents = TRUE)
 
-  ## Below the parameters, never the parameters themselves: a parameter can be
-  ## a derived node, such as sigma when the prior is on log(sigma), and
-  ## recalculating one of those would rewrite the value the draw just gave us.
-  ## Same reasoning as in makeDiscrepancyCalculator().
+  ## Get dependencies of the parameters excluding the parameters to avoid
+  ## overwriting of lifted nodes
   paramDeps <- model$getDependencies(paramNodes, self = FALSE)
 
   function(thetaRow, control = NULL, ...) {
