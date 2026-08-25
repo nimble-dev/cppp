@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cppp — architecture map</title>
+<style>
+/* ------------------------------------------------------------------
+   EDIT ME: colours and sizes all live here.
+   ------------------------------------------------------------------ */
+:root {
+  --ink:        #1b2733;   /* main text                        */
+  --muted:      #6b7a89;   /* secondary text                   */
+  --line:       #c3ced9;   /* tree connector lines             */
+  --page:       #ffffff;   /* page background                  */
+
+  --exported:   #1f77b4;   /* functions users call             */
+  --exported-bg:#eaf3fa;
+  --internal:   #8a94a0;   /* helpers, not exported            */
+  --internal-bg:#f4f6f8;
+  --nimble:     #2e8b70;   /* nimbleFunctions (compiled)       */
+  --nimble-bg:  #e8f4f0;
+  --todo:       #c8871a;   /* placeholders, not implemented    */
+  --todo-bg:    #fdf4e3;
+
+  --box-radius: 5px;
+  --font:  "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono:  "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* ---- page ---- */
+@page { size: 11in 8.5in; margin: 0.4in; }
+body {
+  margin: 0; padding: 28px 34px;
+  background: var(--page); color: var(--ink);
+  font-family: var(--font); font-size: 13px; line-height: 1.45;
+}
+h1 { font-size: 27px; font-weight: 300; margin: 0; letter-spacing: -0.3px; }
+h1 b { font-weight: 600; }
+h2 {
+  font-size: 15px; font-weight: 600; color: var(--exported);
+  margin: 0 0 10px 0;
+}
+.subtitle { color: var(--muted); margin: 4px 0 0 0; }
+
+header {
+  display: flex; align-items: baseline; gap: 18px;
+  border-bottom: 2px solid var(--line); padding-bottom: 10px; margin-bottom: 18px;
+}
+
+/* ---- three columns ---- */
+.columns {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 30px;
+  align-items: start;
+}
+.stack { display: grid; gap: 22px; }
+
+/* ---- boxes ---- */
+.box {
+  display: inline-block;
+  border: 1px solid var(--internal);
+  background: var(--internal-bg);
+  border-radius: var(--box-radius);
+  padding: 3px 8px;
+  font-family: var(--mono); font-size: 12px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.box.exported { border-color: var(--exported); background: var(--exported-bg); font-weight: 600; }
+.box.nimble   { border-color: var(--nimble);   background: var(--nimble-bg); }
+.box.todo     { border-color: var(--todo);     background: var(--todo-bg); border-style: dashed; }
+.note { color: var(--muted); font-size: 11.5px; margin-left: 8px; }
+
+/* ---- tree ---- */
+.tree ul { list-style: none; margin: 0; padding-left: 14px; }
+.tree > ul { padding-left: 0; }
+.tree li { position: relative; padding: 3px 0 3px 20px; }
+.tree > ul > li { padding-left: 0; }
+.tree > ul > li::before, .tree > ul > li::after { display: none; }
+.tree li::before {                    /* vertical connector */
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0;
+  border-left: 1px solid var(--line);
+}
+.tree li:last-child::before { bottom: auto; height: 15px; }
+.tree li::after {                     /* horizontal tick */
+  content: ""; position: absolute; left: 0; top: 15px; width: 13px;
+  border-top: 1px solid var(--line);
+}
+
+/* ---- panels ---- */
+.panel { border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; }
+.panel.plain { border: none; padding: 0; }
+
+/* ---- little lists ---- */
+.rows { display: grid; gap: 7px; }
+.row  { display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+
+/* ---- legend / footer ---- */
+.legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px;
+          padding-top: 12px; border-top: 1px solid var(--line);
+          font-size: 11.5px; color: var(--muted); align-items: center; }
+.swatch { display: inline-block; width: 11px; height: 11px; border-radius: 2px;
+          border: 1px solid; vertical-align: -1px; margin-right: 5px; }
+footer { margin-top: 10px; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>cppp<b> :: architecture map</b></h1>
+  <p class="subtitle">calibrated posterior predictive p-values &mdash; who calls what</p>
+</header>
+
+<div class="columns">
+
+  <!-- ============ LEFT: the call tree ============ -->
+  <div class="stack">
+
+    <div class="panel plain">
+      <h2>Path 1 &mdash; NIMBLE model, one call</h2>
+      <div class="tree">
+        <ul>
+          <li><span class="box exported">runCalibrationNIMBLE()</span>
+            <span class="note">model + specs &rarr; result</span>
+            <ul>
+              <li><span class="box exported">simulation()</span>
+                <span class="note">defaults to <code>simulation("conditional")</code></span></li>
+              <li><span class="box exported">makeDiscrepancyCalculator()</span>
+                <span class="note">builds <code>discFun</code></span>
+                <ul>
+                  <li><span class="box">standardizeDiscrepancies()</span></li>
+                  <li><span class="box">completeDiscrepancy()</span></li>
+                  <li><span class="box">completeSimulation()</span></li>
+                  <li><span class="box nimble">discrepancyCalculatorNF</span>
+                    <span class="note">compiled engine</span>
+                    <ul>
+                      <li><span class="box exported">makeDiscrepancyNimbleFun()</span>
+                        <span class="note">one per discrepancy</span>
+                        <ul>
+                          <li><span class="box">completeDiscrepancy()</span></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li><span class="box">makeSimulateNewDataFun()</span>
+                <span class="note">builds <code>simulateNewDataFun</code></span>
+                <ul>
+                  <li><span class="box">completeSimulation()</span></li>
+                </ul>
+              </li>
+              <li><span class="box exported">runCalibration()</span>
+                <span class="note">the engine below</span></li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="panel plain">
+      <h2>Path 2 &mdash; plain R, you supply the two functions</h2>
+      <div class="tree">
+        <ul>
+          <li><span class="box exported">runCalibration()</span>
+            <span class="note">no model inside &mdash; draws + your functions</span>
+            <ul>
+              <li><span class="box">asDiscMatrix()</span>
+                <span class="note">shape the discrepancy output</span></li>
+              <li><span class="box">checkDiscMatrices()</span>
+                <span class="note">obs and sim must agree</span></li>
+              <li><span class="box exported">newCpppResult()</span>
+                <ul>
+                  <li><span class="box">validateCpppResult()</span>
+                    <span class="note">&rarr; <code>cpppResult</code></span></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+      <div class="rows" style="margin-top:10px">
+        <div class="row">
+          <span class="box exported">makeOfflineDiscFun()</span>
+          <span class="note">helper: wraps your own D(y, &theta;) into a <code>discFun</code></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ RIGHT: specs, result, placeholders ============ -->
+  <div class="stack">
+
+    <div class="panel">
+      <h2>What you write</h2>
+      <div class="rows">
+        <div class="row"><span class="box exported">discrepancy()</span>
+          <span class="note">name, nodes, optional custom fun</span></div>
+        <div class="row"><span class="box exported">simulation()</span>
+          <span class="note">"conditional" or "marginal"</span></div>
+        <div class="row"><span class="box nimble">discrepancyBase</span>
+          <span class="note">your nimbleFunction must <code>contain</code> it</span></div>
+      </div>
+      <p class="note" style="margin:12px 0 6px 0">Five ship with the package &mdash; naming one is a shortcut:</p>
+      <div class="row">
+        <span class="box nimble">meanDisc</span>
+        <span class="box nimble">varianceDisc</span>
+        <span class="box nimble">devianceDisc</span>
+        <span class="box nimble">chisquaredDisc</span>
+        <span class="box nimble">freemantukeyDisc</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>What you get back</h2>
+      <div class="rows">
+        <div class="row"><span class="box">CPPP</span><span class="note">one value per discrepancy</span></div>
+        <div class="row"><span class="box">obsPPP</span><span class="note">observed p-value</span></div>
+        <div class="row"><span class="box">repPPP</span><span class="note">nReps &times; K replicated p-values</span></div>
+        <div class="row"><span class="box">discrepancies</span><span class="note">the raw values</span></div>
+        <div class="row"><span class="box">drawnIndices</span><span class="note">which draws seeded the replicates</span></div>
+      </div>
+      <p class="note" style="margin:10px 0 0 0">
+        An S3 <code>cpppResult</code>. <code>print</code> / <code>summary</code> / <code>plot</code> methods are planned.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>Not wired up yet</h2>
+      <div class="rows">
+        <div class="row"><span class="box todo">transferAutocorrelation()</span>
+          <span class="note">transfer-ESS variance of the cppp</span></div>
+        <div class="row"><span class="box todo">makeDiscrepancyExtractor()</span>
+          <span class="note">read discrepancies the MCMC already computed</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="legend">
+  <span><span class="swatch" style="border-color:var(--exported);background:var(--exported-bg)"></span>exported &mdash; you can call it</span>
+  <span><span class="swatch" style="border-color:var(--internal);background:var(--internal-bg)"></span>internal helper</span>
+  <span><span class="swatch" style="border-color:var(--nimble);background:var(--nimble-bg)"></span>nimbleFunction (compiles) &mdash; <code>discrepancyBase</code> is exported too</span>
+  <span><span class="swatch" style="border-color:var(--todo);background:var(--todo-bg)"></span>placeholder, not implemented</span>
+  <span>indentation = "calls"</span>
+</div>
+
+<footer>
+  cppp &mdash; github.com/nimble-dev/cppp &middot; edit this file at
+  <code>inst/cheatsheet/cppp-architecture.html</code> &middot; open in a browser and Print &rarr; Save as PDF
+</footer>
+
+</body>
+</html>

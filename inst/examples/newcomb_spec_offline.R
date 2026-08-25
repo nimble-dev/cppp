@@ -134,10 +134,26 @@ resNewcomb <- runCalibrationNIMBLE(
   MCMCSamples    = thinned,
   discrepancies  = discs,
   simulation     = sim,
-  nReps          = 5,
-  MCMCcontrolRep = list(niter = 100, nburnin = 0, thin = 1)
+  nReps          = 10,
+  MCMCcontrolRep = list(niter = 10, nburnin = 0, thin = 1)
 )
 
 resNewcomb$obsPPP    # one per discrepancy
 resNewcomb$CPPP      # one per discrepancy
 resNewcomb$repPPP    # nReps x 2
+
+#######
+# nReps <- nrow(resNewcomb$repPPP)
+# se    <- sqrt(resNewcomb$CPPP * (1 - resNewcomb$CPPP) / nReps)
+#
+# data.frame(
+#   discrepancy = names(resNewcomb$CPPP),
+#   obsPPP = round(resNewcomb$obsPPP, 4),
+#   CPPP   = round(resNewcomb$CPPP, 4),
+#   se     = round(se, 4),
+#   lo95   = round(pmax(0, resNewcomb$CPPP - 1.96 * se), 4),
+#   hi95   = round(pmin(1, resNewcomb$CPPP + 1.96 * se), 4),
+#   row.names = NULL
+# )
+
+
