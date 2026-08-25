@@ -17,8 +17,6 @@ Encoding: UTF-8
 Depends:
     R (>= 4.1)
 Imports:
-    methods,
-    stats,
     nimble,
     utils
 Suggests: 

@@ -2,9 +2,8 @@
 ## Newcomb data example: discrepancy specifications + CPPP
 ############################################################
 ##
-## Same model and data as newcomb_nimble_offline.R, but the discrepancies are
-## written as specifications and turned into a calculator by the package,
-## instead of being hand-written R functions.
+## The discrepancies are written as specifications and turned into a
+## calculator by the package, instead of being hand-written R functions.
 ##
 ## Two discrepancies at once:
 ##   mean   -- a built-in, data only
@@ -120,35 +119,23 @@ max(abs(mean(newcombData$y) - d$obs[, "mean"]))  # expect 0
 ############################################################
 ## Stage 3: a small calibration
 ############################################################
-## runCalibrationNIMBLE still needs a function that makes a replicate dataset
-## from one draw. Until it can build one itself, write it here.
-
-newcombNewData <- function(thetaRow, control) {
-  model      <- control$model
-  dataNodes  <- model$expandNodeNames(control$dataNames)
-
-  for (nm in control$paramNames) model[[nm]] <- thetaRow[nm]
-  model$simulate(nodes = dataNodes, includeData = TRUE)
-  values(model, dataNodes)
-}
-
-control <- list(
-  model      = newcombModel$newModel(),
-  dataNames  = dataNames,
-  paramNames = paramNames
-)
+## Hand the same specifications straight to runCalibrationNIMBLE. It builds
+## both the calculator and the replicate-simulating function itself, so there
+## is nothing model-specific left to write here.
+##
+## Note this compiles the discrepancies a second time: `calc` above is not
+## reused, runCalibrationNIMBLE makes its own on its own copy of the model.
 
 set.seed(1)
 resNewcomb <- runCalibrationNIMBLE(
-  model              = newcombModel$newModel(),
-  dataNames          = dataNames,
-  paramNames         = paramNames,
-  MCMCSamples        = thinned,
-  discFun            = calc,
-  simulateNewDataFun = newcombNewData,
-  nReps              = 5,
-  MCMCcontrolRep     = list(niter = 100, nburnin = 0, thin = 1),
-  control            = control
+  model          = newcombModel$newModel(),
+  dataNames      = dataNames,
+  paramNames     = paramNames,
+  MCMCSamples    = thinned,
+  discrepancies  = discs,
+  simulation     = sim,
+  nReps          = 5,
+  MCMCcontrolRep = list(niter = 100, nburnin = 0, thin = 1)
 )
 
 resNewcomb$obsPPP    # one per discrepancy
