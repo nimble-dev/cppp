@@ -7,8 +7,7 @@ A package for Calibrated posterior predictive p-values.
 > This is an active research project in early development. It is public so
 > collaborators can follow along, not because it is ready.
 >
-> - The interface changes often, without notice or deprecation.
-> - There is no released version, and nothing here should be depended on.
+> There is no released version, and nothing here should be depended on.
 >
 > If you want to try it, get in touch first.
 
@@ -54,7 +53,7 @@ $$
 ## Package architecture
 
 There is a one-page architecture map: the two routes through the package, what
-you write, what comes back, and what is not wired up yet.
+you write, what comes back, and what is not not working yet.
 
 **[View the architecture map](https://raw.githack.com/nimble-dev/cppp/master/inst/cheatsheet/cppp-architecture.html)**
 &nbsp;·&nbsp;
