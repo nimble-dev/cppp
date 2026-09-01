@@ -34,8 +34,8 @@ MCMC output does not already include discrepancy columns.
 }
 \details{
 The returned function evaluates discrepancies conditional on \code{targetData},
-which may be the original observed dataset or a replicated dataset from a
-calibration world. It expects posterior samples (\code{MCMCSamples}) and the
+which may be the original observed dataset or a replicated dataset used for calibration.
+It expects posterior samples (\code{MCMCSamples}) and the
 corresponding \code{targetData}, and uses the model-specific functions in
 \code{discConfig} to generate posterior predictive replicates and compute the
 discrepancy values.

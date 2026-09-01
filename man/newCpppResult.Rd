@@ -23,7 +23,7 @@ newCpppResult(
 each replication and dataset (observed and simulated).}
 
 \item{...}{Additional elements to store in the object.
-SP E.g., do we want to save in this object functions used in the pipeline?}
+SP E.g.,do we want to save objects used in the calibration?}
 }
 \value{
 An object of class \code{cpppResult}.

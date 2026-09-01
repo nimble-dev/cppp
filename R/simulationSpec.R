@@ -1,18 +1,18 @@
 #' Create a simulation specification
 #'
-#' A simulation specification describes how replicated data should be generated
-#' from a model when evaluating discrepancies.
+#' A simulation specification is a list that describes how replicated data should
+#' be generated from a model when calculating discrepancies.
 #'
 #' The are two modes:
-#' `"conditional"` holds any latent quantities fixed at the values from the
-#' posterior draw and resimulates only the data. `"marginal"` also redraws the
-#' latent quantities, so the replicate comes from the model integrated over
-#' them.
+#' * `"conditional"` latent quantities are fixed at the values from the
+#' posterior draw, so that only data is resimulated
+#'(indeed conditional to latent qunatities).
+#' * `"marginal"` also redraws the latent quantities, so the replicate
+#' comes from the model integrated over them.
 #'
-#' @param mode Character scalar naming the simulation mode. Current options are
-#'   `"conditional"` and `"marginal"`.
+#' @param mode Character scalar specifying the the mode (`"conditional"` or `"marginal"`)
 #' @param dataNodes Optional character vector of data node names. If `NULL`,
-#'   these may be inferred from a NIMBLE model later.
+#'   these may be inferred from a NIMBLE model.
 #' @param simulateNodes Optional character vector of nodes to resimulate when
 #'   generating a replicate. If `NULL`, defaults depend on `mode`: the data
 #'   nodes for `"conditional"`, and every stochastic node downstream of the
@@ -76,7 +76,7 @@ completeSimulation <- function(model, sim) {
 
   if (is.null(out$simulateNodes)) {
     if (out$mode == "conditional") {
-      ## Everything that is not data stays at the posterior draw.
+      ## Everything that is not data is set equal to the posterior draw.
       out$simulateNodes <- out$dataNodes
     } else if (out$mode == "marginal") {
       ## SP: no default. User must provide latent states

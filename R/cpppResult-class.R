@@ -11,7 +11,7 @@
 #'   each replication and dataset (observed and simulated).
 #'
 #' @param ... Additional elements to store in the object.
-#' SP E.g., do we want to save in this object functions used in the pipeline?
+#' SP E.g.,do we want to save objects used in the calibration?
 #'
 #' @return An object of class `cpppResult`.
 #' @export
@@ -31,8 +31,8 @@ newCpppResult <- function(CPPP = NA_real_,
   validateCpppResult(x)
 }
 
-# Minimal internal validator: keeps inputs sane but stays permissive
 
+# a function to validate the class
 #' @keywords internal
 validateCpppResult <- function(x) {
   stopifnot(inherits(x, "cpppResult"))
@@ -62,9 +62,6 @@ validateCpppResult <- function(x) {
   if (length(x$obsPPP) && (!all(is.finite(x$obsPPP)) || any(x$obsPPP < 0 | x$obsPPP > 1))) {
     stop("All `obsPPP` values must be finite and in [0,1].", call. = FALSE)
   }
-
-  # discrepancies: optional; no strict contract yet
-  # (kept permissive to allow list/array/tibble as you iterate)
 
   invisible(x)
 }

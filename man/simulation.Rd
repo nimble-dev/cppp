@@ -7,11 +7,10 @@
 simulation(mode = "conditional", dataNodes = NULL, simulateNodes = NULL)
 }
 \arguments{
-\item{mode}{Character scalar naming the simulation mode. Current options are
-\code{"conditional"} and \code{"marginal"}.}
+\item{mode}{Character scalar specifying the the mode (\code{"conditional"} or \code{"marginal"})}
 
 \item{dataNodes}{Optional character vector of data node names. If \code{NULL},
-these may be inferred from a NIMBLE model later.}
+these may be inferred from a NIMBLE model.}
 
 \item{simulateNodes}{Optional character vector of nodes to resimulate when
 generating a replicate. If \code{NULL}, defaults depend on \code{mode}: the data
@@ -22,13 +21,16 @@ parameters for \code{"marginal"}.}
 An object of class \code{cppp_simulation}.
 }
 \description{
-A simulation specification describes how replicated data should be generated
-from a model when evaluating discrepancies.
+A simulation specification is a list that describes how replicated data should
+be generated from a model when calculating discrepancies.
 }
 \details{
 The are two modes:
-\code{"conditional"} holds any latent quantities fixed at the values from the
-posterior draw and resimulates only the data. \code{"marginal"} also redraws the
-latent quantities, so the replicate comes from the model integrated over
-them.
+\itemize{
+\item \code{"conditional"} latent quantities are fixed at the values from the
+posterior draw, so that only data is resimulated
+(indeed conditional to latent qunatities).
+\item \code{"marginal"} also redraws the latent quantities, so the replicate
+comes from the model integrated over them.
+}
 }

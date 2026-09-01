@@ -5,8 +5,8 @@
 #' MCMC output does not already include discrepancy columns.
 #'
 #' The returned function evaluates discrepancies conditional on `targetData`,
-#' which may be the original observed dataset or a replicated dataset from a
-#' calibration world. It expects posterior samples (`MCMCSamples`) and the
+#' which may be the original observed dataset or a replicated dataset used for calibration.
+#' It expects posterior samples (`MCMCSamples`) and the
 #' corresponding `targetData`, and uses the model-specific functions in
 #' `discConfig` to generate posterior predictive replicates and compute the
 #' discrepancy values.
