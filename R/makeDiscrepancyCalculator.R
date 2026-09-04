@@ -6,8 +6,8 @@
 #'
 #' @details
 #' For each posterior draw, the returned function sets the parameter nodes,
-#' writes the supplied dataset into the data nodes, evaluates every
-#' discrepancy, simulates a replicate dataset, and evaluates every discrepancy
+#' evaluates every discrepancy using the data in the model,
+#' simulates a replicate dataset, and evaluates every discrepancy
 #' again. The model is restored to its original state on completion.
 #'
 #' The returned function is suitable as the `discFun` argument of
@@ -47,8 +47,42 @@
 #' colMeans(d$sim >= d$obs)   # posterior predictive p-value per discrepancy
 #' }
 #' @export
+#' @export
 makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes,
                                       compile = TRUE) {
+
+  parts <- buildDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
+
+  if (compile) {
+    compiled     <- compileNimble(list(model, parts$calcNF))
+    parts$calcNF <- compiled[[2]]
+  }
+
+  wrapDiscrepancyCalculator(parts)
+}
+
+
+#' Build the calculator without compiling
+#'
+#' The first half of [makeDiscrepancyCalculator()]. It checks the
+#' specifications and builds the nimbleFunction that holds the loop over draws,
+#' but does not compile it.
+#'
+#' Kept separate so the nimbleFunction can be compiled together with the model
+#' and the MCMC in one call, rather than in a call of its own. Hand the result
+#' to [wrapDiscrepancyCalculator()], with `calcNF` replaced by the compiled
+#' version if there is one.
+#'
+#' @param model An uncompiled NIMBLE model.
+#' @param discrepancies A [discrepancy()] specification, or a list of them.
+#' @param simulation A [simulation()] specification.
+#' @param paramNodes Character vector naming the model nodes to set from each
+#'   posterior draw.
+#'
+#' @return A list with the nimbleFunction `calcNF`, the expanded `paramNodes`,
+#'   the `dataNodes` the dataset is written into, and the `discNames`.
+#' @keywords internal
+buildDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes) {
 
   ## A nimbleFunction is built against an uncompiled model, so we need one to
   ## start from even though the work then happens on the compiled copy.
@@ -61,7 +95,7 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
   discs   <- lapply(discs, function(d) completeDiscrepancy(model, d))
   simSpec <- completeSimulation(model, simulation)
 
-  ## SP: not sure if it is necessary to expand paramNodes here - it may be redundat
+  ## SP: not sure if it is necessary to expand paramNodes here - it may be redundant
   paramNodes <- model$expandNodeNames(paramNodes, returnScalarComponents = TRUE)
 
   discNames <- vapply(discs, function(d) d$name, character(1))
@@ -85,9 +119,7 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     }
   }
 
-  K <- length(discs)
-
-  ## The loop over draws lives inside a nimbleFunction, so it runs in compiled
+  ## We loop over posterior draws withing the nimbleFunction, so it runs in compiled
   ## code rather than crossing back into R for every draw and every
   ## discrepancy. Compiling it also compiles the discrepancies with it, in one
   ## call.
@@ -99,10 +131,36 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     paramNodes = paramNodes
   )
 
-  if (compile) {
-    compiled <- compileNimble(list(model, calcNF))
-    calcNF   <- compiled[[2]]
-  }
+  list(
+    calcNF     = calcNF,
+    paramNodes = paramNodes,
+    dataNodes  = simSpec$dataNodes,
+    discNames  = discNames
+  )
+}
+
+
+#' Wrap the calculator's pieces into the function you call
+#'
+#' The second half of [makeDiscrepancyCalculator()]. Takes what
+#' [buildDiscrepancyCalculator()] produced and returns the function that
+#' [runCalibration()] calls, which lines the draws up for the nimbleFunction
+#' and puts names back on the results.
+#'
+#' Works whether `calcNF` has been compiled or not.
+#'
+#' @param parts The list returned by [buildDiscrepancyCalculator()].
+#'
+#' @return A function of `(MCMCSamples, targetData, control, ...)`, returning a
+#'   list of two matrices, `obs` and `sim`.
+#' @keywords internal
+wrapDiscrepancyCalculator <- function(parts) {
+
+  calcNF     <- parts$calcNF
+  paramNodes <- parts$paramNodes
+  dataNodes  <- parts$dataNodes
+  discNames  <- parts$discNames
+  K          <- length(discNames)
 
   function(MCMCSamples, targetData, control = NULL, ...) {
 
@@ -118,9 +176,9 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     draws <- MCMCSamples[, match(paramNodes, colnames(MCMCSamples)), drop = FALSE]
     storage.mode(draws) <- "double"
 
-    if (!is.numeric(targetData) || length(targetData) != length(simSpec$dataNodes)) {
+    if (!is.numeric(targetData) || length(targetData) != length(dataNodes)) {
       stop("`targetData` must be a numeric vector with one value per data node (",
-           length(simSpec$dataNodes), " expected).", call. = FALSE)
+           length(dataNodes), " expected).", call. = FALSE)
     }
 
     res <- calcNF$run(draws, as.numeric(targetData))
@@ -133,6 +191,7 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
     list(obs = obs, sim = sim)
   }
 }
+
 
 
 #' Compute discrepancies for every posterior draw

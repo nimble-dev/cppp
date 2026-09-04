@@ -37,8 +37,8 @@ specifications.
 }
 \details{
 For each posterior draw, the returned function sets the parameter nodes,
-writes the supplied dataset into the data nodes, evaluates every
-discrepancy, simulates a replicate dataset, and evaluates every discrepancy
+evaluates every discrepancy using the data in the model,
+simulates a replicate dataset, and evaluates every discrepancy
 again. The model is restored to its original state on completion.
 
 The returned function is suitable as the \code{discFun} argument of
