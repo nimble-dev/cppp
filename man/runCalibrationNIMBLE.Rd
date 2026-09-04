@@ -23,7 +23,7 @@ runCalibrationNIMBLE(
 )
 }
 \arguments{
-\item{model}{either an uncompiled or compiled nimbleModel, initialized with observed data.}
+\item{model}{An uncompiled nimbleModel, initialized with observed data. The model, the MCMC and the discrepancy calculator are compiled together in one call.}
 
 \item{dataNames}{Optional character vector of data node names. If NULL,
 nodes flagged as data in the model are used.}

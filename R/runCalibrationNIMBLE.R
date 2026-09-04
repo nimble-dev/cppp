@@ -1,6 +1,6 @@
 #' Run calibration using a NIMBLE model
 #'
-#' @param model either an uncompiled or compiled nimbleModel, initialized with observed data.
+#' @param model An uncompiled nimbleModel, initialized with observed data. The model, the MCMC and the discrepancy calculator are compiled together in one call.
 #' @param dataNames Optional character vector of data node names. If NULL,
 #'   nodes flagged as data in the model are used.
 #' @param paramNames Optional character vector of parameter node names to monitor.
@@ -46,6 +46,18 @@ runCalibrationNIMBLE <- function(
 
   verbose <- isTRUE(control$verbose)
 
+  ## 0. The model, the MCMC and the discrepancy calculator are compiled
+  ## together in one call further down, so we have to start from an uncompiled
+  ## model: NIMBLE cannot add these to a project that already exists.
+  if (inherits(model, "CmodelBaseClass")) {
+    stop("`model` must be an uncompiled NIMBLE model. The model, the MCMC and ",
+         "the discrepancy calculator are compiled together in one call.",
+         call. = FALSE)
+  }
+  if (!inherits(model, "RmodelBaseClass")) {
+    stop("Argument 'model' must be a nimbleModel.", call. = FALSE)
+  }
+
   ## 0. Data names and checks
   ## if dataNames is not provided, then use all nodes in the model that are data
   if (is.null(dataNames)) {
@@ -69,56 +81,71 @@ runCalibrationNIMBLE <- function(
     stop("paramNames did not match to any stochastic non-data nodes.")
   }
 
-  ## 0. Build the discrepancy calculator from specifications, if given.
+  ## 1. Build the discrepancy calculator's pieces from specifications, if
+  ## given. We compuile the calculator's nimbleFunction, the model and
+  ## the MCMC once
+  calcParts <- NULL
+  simSpec   <- NULL
   if (!is.null(discrepancies)) {
     if (!is.null(discFun)) {
       stop("Give either `discrepancies` or `discFun`, not both.", call. = FALSE)
     }
-    ## Named apart from the `simulation` argument so it is clear which is which.
+
     simSpec <- if (is.null(simulation)) simulation("conditional") else simulation
 
     ## The dataset written into the model, the one read back out, and the one
     ## the engine treats as observed all have to be the same nodes. Take
-    ## `dataNames` as the answer unless the specification says otherwise.
-    if (is.null(simSpec$dataNodes)) simSpec$dataNodes <- dataNames
+    ## `dataNodes` as the answer unless the specification says otherwise.
+    if (is.null(simSpec$dataNodes)) simSpec$dataNodes <- dataNodes
 
-    ## The calculator needs its own copy of the model
-    baseModel <- if (inherits(model, "CmodelBaseClass")) model$Rmodel else model
-
-    discFun <- makeDiscrepancyCalculator(
-      model         = baseModel$newModel(),
+    calcParts <- buildDiscrepancyCalculator(
+      model         = model,
       discrepancies = discrepancies,
       simulation    = simSpec,
       paramNodes    = paramNodes
     )
-
-    ## And the replicate-simulating function, from the same specification.
-    if (missing(simulateNewDataFun) || is.null(simulateNewDataFun)) {
-      simulateNewDataFun <- makeSimulateNewDataFun(
-        model      = baseModel$newModel(),
-        simulation = simSpec,
-        paramNodes = paramNodes
-      )
-    }
   }
 
-  if (is.null(discFun)) {
+  if (is.null(calcParts) && is.null(discFun)) {
     stop("Supply `discrepancies` (recommended) or `discFun`.", call. = FALSE)
   }
-  if (is.null(simulateNewDataFun)) {
+  if (is.null(calcParts) && is.null(simulateNewDataFun)) {
     stop("Supply `simulateNewDataFun`, or `discrepancies` so it can be built for you.",
          call. = FALSE)
   }
 
-  ## check if the model is compiled model
-  if (inherits(model, "CmodelBaseClass")) {
-    ## Model is already compiled
-    cmodel <- model
-  } else if (inherits(model, "RmodelBaseClass")) {
-    ## Model is not compiled yet
-    cmodel <- compileNimble(model)
-  } else {
-    stop("Argument 'model' must be a nimbleModel or a compiled nimble model.")
+  ## 2. Build the MCMC.
+  if (is.null(mcmcConfFun)) {
+    mcmcConfFun <- function(model) {
+      configureMCMC(model, monitors = paramNodes, print = FALSE)
+    }
+  }
+  mcmcConf       <- mcmcConfFun(model)
+  mcmcUncompiled <- buildMCMC(mcmcConf)
+
+  ## 3. One compile, for everything.
+  toCompile <- list(model, mcmcUncompiled)
+  if (!is.null(calcParts)) toCompile <- c(toCompile, list(calcParts$calcNF))
+
+  compiled <- compileNimble(toCompile)
+  cmodel   <- compiled[[1]]
+  cmcmc    <- compiled[[2]]
+  if (!is.null(calcParts)) calcParts$calcNF <- compiled[[3]]
+
+  ## 4. Finish the two functions that need the compiled pieces.
+  if (!is.null(calcParts)) {
+    discFun <- wrapDiscrepancyCalculator(calcParts)
+
+    if (is.null(simulateNewDataFun)) {
+      ## Built on the compiled model, so simulating a replicate runs in
+      ## compiled code. It also leaves the model holding the draw it simulated
+      ## from, which is where that replicate's chain then starts.
+      simulateNewDataFun <- makeSimulateNewDataFun(
+        model      = cmodel,
+        simulation = simSpec,
+        paramNodes = paramNodes
+      )
+    }
   }
 
   if (verbose) {
@@ -127,18 +154,8 @@ runCalibrationNIMBLE <- function(
     message("Compiled model class: ", paste(class(cmodel), collapse = "/"))
   }
 
-  ## 1. Obtain posterior draws from observed data (either run MCMC or use user-supplied samples)
+  ## 5. Obtain posterior draws from observed data (either run MCMC or use user-supplied samples)
   if (is.null(MCMCSamples)) {
-
-    ## Configure and compile MCMC for main chain
-    if (is.null(mcmcConfFun)) {
-      mcmcConfFun <- function(model) {
-        configureMCMC(model, monitors = paramNodes, print = FALSE)
-      }
-    }
-    mcmcConf       <- mcmcConfFun(model)
-    mcmcUncompiled <- buildMCMC(mcmcConf)
-    cmcmc          <- compileNimble(mcmcUncompiled, project = model, resetFunctions = TRUE)
 
     ## Run main chain on observed data
     obsMCMC <- runMCMC(
@@ -175,22 +192,10 @@ runCalibrationNIMBLE <- function(
          paste(setdiff(paramNodes, colnames(MCMCSamples)), collapse = ", "))
   }
 
-    ## Ensure we have a compiled MCMC object for replicated calibration runs
-  if (!exists("cmcmc", inherits = FALSE)) {
-    if (is.null(mcmcConfFun)) {
-      mcmcConfFun <- function(model) {
-        configureMCMC(model, monitors = paramNodes, print = FALSE)
-      }
-    }
-    mcmcConf       <- mcmcConfFun(model)
-    mcmcUncompiled <- buildMCMC(mcmcConf)
-    cmcmc          <- compileNimble(mcmcUncompiled, project = model, resetFunctions = TRUE)
-  }
-
   ## SP: extract observed data as a numeric vector over expanded data nodes
   observedData <- values(cmodel, dataNodes)
 
-  ## 4. Build MCMCFun for replicated datasets
+  ## 6. Build MCMCFun for replicated datasets
   MCMCFun <- function(targetData, control) {
     if (!is.numeric(targetData) || length(targetData) != length(dataNodes)) {
       stop("targetData must be a numeric vector with one entry per data node.")
