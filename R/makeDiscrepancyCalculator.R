@@ -47,7 +47,7 @@
 #' colMeans(d$sim >= d$obs)   # posterior predictive p-value per discrepancy
 #' }
 #' @export
-#' @export
+
 makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes,
                                       compile = TRUE) {
 

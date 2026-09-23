@@ -117,6 +117,28 @@ test_that("makeDiscrepancyCalculator() puts the model back as it found it", {
   expect_equal(values(model, "mu"), muBefore)
 })
 
+test_that("makeDiscrepancyCalculator() leaves the whole model state unchanged", {
+  code <- nimbleCode({
+    for (i in 1:n) y[i] ~ dnorm(mu, sd = sigma)
+    mu ~ dflat()
+    log(sigma) ~ dflat()
+  })
+  model <- nimbleModel(code, constants = list(n = 3), data = list(y = c(1, 2, 3)),
+                       inits = list(mu = 0, log_sigma = 2))
+
+  discFun <- makeDiscrepancyCalculator(model, discrepancy("deviance"),
+                                       simulation("conditional"),
+                                       paramNodes = c("mu", "sigma"), compile = FALSE)
+
+  ## Includes logProb_* nodes, not just the variables we think we touched.
+  snapshotVars <- model$getVarNames(includeLogProb = TRUE)
+  before <- values(model, snapshotVars)
+
+  discFun(cbind(mu = c(0, 5), sigma = c(1, 4)), targetData = c(9, 9, 9))
+
+  expect_equal(values(model, snapshotVars), before)
+})
+
 test_that("makeDiscrepancyCalculator() complains instead of returning wrong numbers", {
   model <- makeTestModel()
 
