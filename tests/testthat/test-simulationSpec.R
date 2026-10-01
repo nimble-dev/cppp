@@ -8,41 +8,12 @@ test_that("simulation() creates a basic simulation spec", {
 
   expect_s3_class(sim, "cppp_simulation")
   expect_equal(sim$mode, "conditional")
-  expect_null(sim$dataNodes)
-  expect_null(sim$simulateNodes)
+  expect_null(sim$latentNodes)
+
+  expect_error(simulation("conditional", latentNodes = "b"), "only used")
 })
 
-## In marginal mode the user says which nodes to resimulate; there is no default.
-test_that("completeSimulation() requires simulate nodes in marginal mode", {
-  code <- nimbleCode({
-    for (i in 1:n) {
-      y[i] ~ dnorm(mu, sd = 1)
-    }
-    mu ~ dnorm(0, sd = 10)
-  })
-
-  model <- nimbleModel(
-    code = code,
-    constants = list(n = 4),
-    data = list(y = c(1, 2, 3, 4)),
-    inits = list(mu = 0)
-  )
-
-  expect_error(
-    completeSimulation(model, simulation(mode = "marginal")),
-    "simulateNodes"
-  )
-
-  sim <- simulation(mode = "marginal", simulateNodes = "y")
-  out <- completeSimulation(model, sim)
-
-  expect_equal(out$mode, "marginal")
-  expect_equal(out$dataNodes, model$expandNodeNames("y", returnScalarComponents = TRUE))
-  expect_equal(out$simulateNodes, model$expandNodeNames("y", returnScalarComponents = TRUE))
-})
-
-## The difference between the two modes, on a model with latent effects.
-test_that("marginal redraws the latent nodes the user names, conditional does not", {
+makeLatentModel <- function() {
   code <- nimbleCode({
     for (i in 1:n) {
       b[i] ~ dnorm(0, sd = tau)
@@ -51,43 +22,68 @@ test_that("marginal redraws the latent nodes the user names, conditional does no
     mu ~ dnorm(0, sd = 10)
     tau ~ dunif(0, 10)
   })
+  nimbleModel(code, constants = list(n = 3), data = list(y = c(1, 2, 3)),
+              inits = list(mu = 0, tau = 1, b = rep(0, 3)))
+}
 
-  model <- nimbleModel(
-    code = code,
-    constants = list(n = 3),
-    data = list(y = c(1, 2, 3)),
-    inits = list(mu = 0, tau = 1, b = rep(0, 3))
-  )
+## In marginal mode only the user knows the latent states; there is no default.
+test_that("completeNodes() requires latent nodes in marginal mode", {
+  model <- makeLatentModel()
 
-  bNodes <- model$expandNodeNames("b", returnScalarComponents = TRUE)
-
-  marg <- completeSimulation(model, simulation(mode = "marginal",
-                                               simulateNodes = c("b", "y")))
-  cond <- completeSimulation(model, simulation(mode = "conditional"))
-
-  expect_true(all(bNodes %in% marg$simulateNodes))
-  expect_false(any(bNodes %in% cond$simulateNodes))
-  expect_equal(cond$simulateNodes, cond$dataNodes)
+  expect_error(completeNodes(model, simulation = simulation("marginal")),
+               "latentNodes")
+  expect_error(completeNodes(model, simulation = simulation("marginal", latentNodes = "y")),
+               "must not include data")
 })
 
-## In conditional mode, the default is to simulate only the data nodes.
-test_that("completeSimulation() uses data nodes as default simulate nodes in conditional mode", {
+## The difference between the two modes, on a model with latent effects.
+test_that("marginal redraws the latents and everything below, conditional only the data", {
+  model <- makeLatentModel()
+  bNodes <- model$expandNodeNames("b", returnScalarComponents = TRUE)
+  yNodes <- model$expandNodeNames("y", returnScalarComponents = TRUE)
+
+  marg <- completeNodes(model, simulation = simulation("marginal", latentNodes = "b"))
+  cond <- completeNodes(model, simulation = simulation("conditional"))
+
+  ## the user names b; the helper nodes NIMBLE puts between b and y, and y
+  ## itself, are added
+  expect_true(all(bNodes %in% marg$simulate))
+  expect_true(all(yNodes %in% marg$simulate))
+  expect_true(any(grepl("^lifted_", marg$simulate)))
+
+  expect_false(any(bNodes %in% cond$simulate))
+  expect_equal(cond$simulate, cond$data)
+})
+
+## Naming the top latent layer redraws the lower ones too, past the first
+## stochastic node below it.
+test_that("completeNodes() redraws every layer below the named latents", {
   code <- nimbleCode({
     for (i in 1:n) {
-      y[i] ~ dnorm(mu, sd = 1)
+      b[i] ~ dnorm(0, sd = 1)
+      c[i] ~ dnorm(b[i], sd = 1)
+      y[i] ~ dnorm(c[i], sd = 1)
     }
-    mu ~ dnorm(0, sd = 10)
   })
+  model <- nimbleModel(code, constants = list(n = 2), data = list(y = c(1, 2)),
+                       inits = list(b = c(0, 0), c = c(0, 0)))
 
-  model <- nimbleModel(
-    code = code,
-    constants = list(n = 4),
-    data = list(y = c(1, 2, 3, 4)),
-    inits = list(mu = 0)
-  )
+  out <- completeNodes(model, paramNodes = "b",
+                       simulation = simulation("marginal", latentNodes = "b"))
 
-  sim <- simulation(mode = "conditional")
-  out <- completeSimulation(model, sim)
+  expect_setequal(out$simulate, c("b[1]", "b[2]", "c[1]", "c[2]", "y[1]", "y[2]"))
+})
 
-  expect_equal(out$simulateNodes, out$dataNodes)
+test_that("completeNodes() fills in the data and parameter defaults", {
+  model <- makeLatentModel()
+  out <- completeNodes(model)
+
+  expect_s3_class(out, "cppp_nodes")
+  expect_equal(out$data, model$expandNodeNames("y", returnScalarComponents = TRUE))
+  expect_setequal(out$params, model$expandNodeNames(c("b", "mu", "tau"),
+                                                    returnScalarComponents = TRUE))
+  expect_true(all(c(out$params, out$paramDeps, out$simulate) %in% out$saved))
+
+  expect_error(completeNodes(model, dataNodes = "b", paramNodes = character(0)),
+               "did not match")
 })

@@ -4,18 +4,14 @@
 \alias{simulation}
 \title{Create a simulation specification}
 \usage{
-simulation(mode = "conditional", dataNodes = NULL, simulateNodes = NULL)
+simulation(mode = "conditional", latentNodes = NULL)
 }
 \arguments{
 \item{mode}{Character scalar specifying the the mode (\code{"conditional"} or \code{"marginal"})}
 
-\item{dataNodes}{Optional character vector of data node names. If \code{NULL},
-these may be inferred from a NIMBLE model.}
-
-\item{simulateNodes}{Optional character vector of nodes to resimulate when
-generating a replicate. If \code{NULL}, defaults depend on \code{mode}: the data
-nodes for \code{"conditional"}, and every stochastic node downstream of the
-parameters for \code{"marginal"}.}
+\item{latentNodes}{Character vector of the latent nodes to redraw, needed
+for \code{"marginal"} and not used for \code{"conditional"}. Name the top of what to
+redraw: everything below these nodes, data included, is redrawn too.}
 }
 \value{
 An object of class \code{cppp_simulation}.
