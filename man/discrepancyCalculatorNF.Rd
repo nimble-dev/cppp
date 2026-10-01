@@ -4,18 +4,14 @@
 \alias{discrepancyCalculatorNF}
 \title{Compute discrepancies for every posterior draw}
 \usage{
-discrepancyCalculatorNF(model, discs, dataNodes, simNodes, paramNodes)
+discrepancyCalculatorNF(model, discs, nodes)
 }
 \arguments{
 \item{model}{A NIMBLE model.}
 
 \item{discs}{List of completed \code{cppp_discrepancy} objects.}
 
-\item{dataNodes}{Nodes the dataset is written into.}
-
-\item{simNodes}{Nodes resimulated for a replicate.}
-
-\item{paramNodes}{Nodes set from each draw.}
+\item{nodes}{The node lists, from \code{\link[=completeNodes]{completeNodes()}}.}
 }
 \description{
 The work behind \code{\link[=makeDiscrepancyCalculator]{makeDiscrepancyCalculator()}}. For each draw it sets the

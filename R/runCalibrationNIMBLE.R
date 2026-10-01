@@ -58,51 +58,25 @@ runCalibrationNIMBLE <- function(
     stop("Argument 'model' must be a nimbleModel.", call. = FALSE)
   }
 
-  ## 0. Data names and checks
-  ## if dataNames is not provided, then use all nodes in the model that are data
-  if (is.null(dataNames)) {
-    dataNames <- model$getNodeNames(dataOnly = TRUE)
-  }
-  ## expand to nodes
-  dataNodes <- model$expandNodeNames(dataNames, returnScalarComponents = TRUE)
-  # ensure dataNames correspond to stochastic nodes
-  testDataNames <- all(dataNodes %in%
-                         model$getNodeNames(stochOnly = TRUE))
-  if (!testDataNames) {
-    stop("All dataNames must be stochastic nodes in the model.")
-  }
-
-  ## 0. deal with paramNodes. If missing we take all the stochastic nodes that are not data
-  if (is.null(paramNames)) {
-    paramNames <- model$getNodeNames(stochOnly = TRUE, includeData = FALSE)
-  }
-  paramNodes <- model$expandNodeNames(paramNames, returnScalarComponents = TRUE)
-  if (length(paramNodes) == 0) {
-    stop("paramNames did not match to any stochastic non-data nodes.")
-  }
+  ## 0. Work out every node list once; the calculator, the simulate function
+  ## and the MCMC all take their nodes from here.
+  nodes      <- completeNodes(model, dataNames, paramNames, simulation)
+  dataNodes  <- nodes$data
+  paramNodes <- nodes$params
 
   ## 1. Build the discrepancy calculator's pieces from specifications, if
   ## given. We compuile the calculator's nimbleFunction, the model and
   ## the MCMC once
   calcParts <- NULL
-  simSpec   <- NULL
   if (!is.null(discrepancies)) {
     if (!is.null(discFun)) {
       stop("Give either `discrepancies` or `discFun`, not both.", call. = FALSE)
     }
 
-    simSpec <- if (is.null(simulation)) simulation("conditional") else simulation
-
-    ## The dataset written into the model, the one read back out, and the one
-    ## the engine treats as observed all have to be the same nodes. Take
-    ## `dataNodes` as the answer unless the specification says otherwise.
-    if (is.null(simSpec$dataNodes)) simSpec$dataNodes <- dataNodes
-
     calcParts <- buildDiscrepancyCalculator(
       model         = model,
       discrepancies = discrepancies,
-      simulation    = simSpec,
-      paramNodes    = paramNodes
+      nodes         = nodes
     )
   }
 
@@ -123,7 +97,7 @@ runCalibrationNIMBLE <- function(
   mcmcConf       <- mcmcConfFun(model)
   mcmcUncompiled <- buildMCMC(mcmcConf)
 
-  ## 3. One compile, for everything.
+  ## 3. Compile once for everything.
   toCompile <- list(model, mcmcUncompiled)
   if (!is.null(calcParts)) toCompile <- c(toCompile, list(calcParts$calcNF))
 
@@ -141,9 +115,8 @@ runCalibrationNIMBLE <- function(
       ## compiled code. It also leaves the model holding the draw it simulated
       ## from, which is where that replicate's chain then starts.
       simulateNewDataFun <- makeSimulateNewDataFun(
-        model      = cmodel,
-        simulation = simSpec,
-        paramNodes = paramNodes
+        model = cmodel,
+        nodes = nodes
       )
     }
   }

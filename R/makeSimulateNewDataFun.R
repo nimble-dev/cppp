@@ -1,27 +1,22 @@
 #' Build a function that simulates one replicate dataset
 #'
 #' Builds the function that makes one replicate dataset from one posterior draw,
-#' following a [simulation()] specification.
+#' using the node lists from [completeNodes()].
 #'
 #' Give it its own copy of the model, `model$newModel()`. It writes parameter
 #' values into the model and simulates into the data nodes.
 #'
 #' @param model A NIMBLE model.
-#' @param simulation A [simulation()] specification.
-#' @param paramNodes Character vector naming the model nodes set from the draw.
+#' @param nodes The node lists, from [completeNodes()].
 #'
 #' @return A function `function(thetaRow, control = NULL, ...)` returning the
 #'   replicate dataset as a numeric vector, one value per data node.
 #' @seealso [makeDiscrepancyCalculator()], [runCalibrationNIMBLE()]
 #' @keywords internal
-makeSimulateNewDataFun <- function(model, simulation, paramNodes) {
+makeSimulateNewDataFun <- function(model, nodes) {
 
-  simSpec    <- completeSimulation(model, simulation)
-  paramNodes <- model$expandNodeNames(paramNodes, returnScalarComponents = TRUE)
-
-  ## Get dependencies of the parameters excluding the parameters to avoid
-  ## overwriting of lifted nodes
-  paramDeps <- model$getDependencies(paramNodes, self = FALSE)
+  paramNodes <- nodes$params
+  paramDeps  <- nodes$paramDeps
 
   function(thetaRow, control = NULL, ...) {
 
@@ -43,8 +38,8 @@ makeSimulateNewDataFun <- function(model, simulation, paramNodes) {
     values(model, paramNodes) <- as.numeric(draw)
     model$calculate(paramDeps)
 
-    model$simulate(simSpec$simulateNodes, includeData = TRUE)
+    model$simulate(nodes$simulate, includeData = TRUE)
 
-    values(model, simSpec$dataNodes)
+    values(model, nodes$data)
   }
 }

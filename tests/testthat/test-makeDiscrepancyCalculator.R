@@ -146,8 +146,9 @@ test_that("makeDiscrepancyCalculator() complains instead of returning wrong numb
   expect_error(
     makeDiscrepancyCalculator(model,
                               discrepancy("mean"),                # all of y
-                              simulation("conditional", dataNodes = "y[1:2]"),
-                              paramNodes = "mu", compile = FALSE),
+                              simulation("conditional"),
+                              paramNodes = "mu", dataNodes = "y[1:2]",
+                              compile = FALSE),
     "does not set"
   )
 

@@ -4,14 +4,12 @@
 \alias{makeSimulateNewDataFun}
 \title{Build a function that simulates one replicate dataset}
 \usage{
-makeSimulateNewDataFun(model, simulation, paramNodes)
+makeSimulateNewDataFun(model, nodes)
 }
 \arguments{
 \item{model}{A NIMBLE model.}
 
-\item{simulation}{A \code{\link[=simulation]{simulation()}} specification.}
-
-\item{paramNodes}{Character vector naming the model nodes set from the draw.}
+\item{nodes}{The node lists, from \code{\link[=completeNodes]{completeNodes()}}.}
 }
 \value{
 A function \verb{function(thetaRow, control = NULL, ...)} returning the
@@ -19,7 +17,7 @@ replicate dataset as a numeric vector, one value per data node.
 }
 \description{
 Builds the function that makes one replicate dataset from one posterior draw,
-following a \code{\link[=simulation]{simulation()}} specification.
+using the node lists from \code{\link[=completeNodes]{completeNodes()}}.
 }
 \details{
 Give it its own copy of the model, \code{model$newModel()}. It writes parameter

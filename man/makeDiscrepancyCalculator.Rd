@@ -9,6 +9,7 @@ makeDiscrepancyCalculator(
   discrepancies,
   simulation,
   paramNodes,
+  dataNodes = NULL,
   compile = TRUE
 )
 }
@@ -21,6 +22,9 @@ makeDiscrepancyCalculator(
 
 \item{paramNodes}{Character vector naming the model nodes to set from each
 posterior draw. These must appear among the column names of the draws.}
+
+\item{dataNodes}{Optional character vector of the data nodes the dataset is
+written into. If \code{NULL}, all data nodes in the model.}
 
 \item{compile}{Compile the model and the discrepancies? \code{TRUE} by default.}
 }

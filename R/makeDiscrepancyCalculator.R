@@ -23,6 +23,8 @@
 #' @param simulation A [simulation()] specification.
 #' @param paramNodes Character vector naming the model nodes to set from each
 #'   posterior draw. These must appear among the column names of the draws.
+#' @param dataNodes Optional character vector of the data nodes the dataset is
+#'   written into. If `NULL`, all data nodes in the model.
 #' @param compile Compile the model and the discrepancies? `TRUE` by default.
 #'
 #' @return A function of `(MCMCSamples, targetData, control, ...)`, returning a
@@ -49,9 +51,10 @@
 #' @export
 
 makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes,
-                                      compile = TRUE) {
+                                      dataNodes = NULL, compile = TRUE) {
 
-  parts <- buildDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
+  nodes <- completeNodes(model, dataNodes, paramNodes, simulation)
+  parts <- buildDiscrepancyCalculator(model, discrepancies, nodes)
 
   if (compile) {
     compiled     <- compileNimble(list(model, parts$calcNF))
@@ -75,14 +78,12 @@ makeDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNod
 #'
 #' @param model An uncompiled NIMBLE model.
 #' @param discrepancies A [discrepancy()] specification, or a list of them.
-#' @param simulation A [simulation()] specification.
-#' @param paramNodes Character vector naming the model nodes to set from each
-#'   posterior draw.
+#' @param nodes The node lists, from [completeNodes()].
 #'
 #' @return A list with the nimbleFunction `calcNF`, the expanded `paramNodes`,
 #'   the `dataNodes` the dataset is written into, and the `discNames`.
 #' @keywords internal
-buildDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNodes) {
+buildDiscrepancyCalculator <- function(model, discrepancies, nodes) {
 
   ## A nimbleFunction is built against an uncompiled model, so we need one to
   ## start from even though the work then happens on the compiled copy.
@@ -93,10 +94,6 @@ buildDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNo
 
   discs   <- standardizeDiscrepancies(discrepancies)
   discs   <- lapply(discs, function(d) completeDiscrepancy(model, d))
-  simSpec <- completeSimulation(model, simulation)
-
-  ## SP: not sure if it is necessary to expand paramNodes here - it may be redundant
-  paramNodes <- model$expandNodeNames(paramNodes, returnScalarComponents = TRUE)
 
   discNames <- vapply(discs, function(d) d$name, character(1))
   if (anyDuplicated(discNames)) {
@@ -105,16 +102,14 @@ buildDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNo
          call. = FALSE)
   }
 
-  ## SP: both discrepancy and simulation allows to specify dataNodes. For discrepancy
-  ## those are the ones used in calculation and for simulation those nodes are the ones
-  ## to simulate into. Nodes for discrepancy needs to be a subset (or match exactly)
-  ## the ones in simulation
+  ## SP: a discrepancy may look at part of the data only, but never at nodes
+  ## outside the data we write into and simulate.
   for (d in discs) {
-    unwritten <- setdiff(d$dataNodes, simSpec$dataNodes)
+    unwritten <- setdiff(d$dataNodes, nodes$data)
     if (length(unwritten) > 0L) {
       stop("Discrepancy '", d$name, "' reads data nodes the simulation does not set: ",
            paste(unwritten, collapse = ", "),
-           ". Give `discrepancy()` and `simulation()` matching `dataNodes`.",
+           ". Give `discrepancy()` only nodes among the data nodes.",
            call. = FALSE)
     }
   }
@@ -124,17 +119,15 @@ buildDiscrepancyCalculator <- function(model, discrepancies, simulation, paramNo
   ## discrepancy. Compiling it also compiles the discrepancies with it, in one
   ## call.
   calcNF <- discrepancyCalculatorNF(
-    model      = model,
-    discs      = discs,
-    dataNodes  = simSpec$dataNodes,
-    simNodes   = simSpec$simulateNodes,
-    paramNodes = paramNodes
+    model = model,
+    discs = discs,
+    nodes = nodes
   )
 
   list(
     calcNF     = calcNF,
-    paramNodes = paramNodes,
-    dataNodes  = simSpec$dataNodes,
+    paramNodes = nodes$params,
+    dataNodes  = nodes$data,
     discNames  = discNames
   )
 }
@@ -206,20 +199,22 @@ wrapDiscrepancyCalculator <- function(parts) {
 #'
 #' @param model A NIMBLE model.
 #' @param discs List of completed `cppp_discrepancy` objects.
-#' @param dataNodes Nodes the dataset is written into.
-#' @param simNodes Nodes resimulated for a replicate.
-#' @param paramNodes Nodes set from each draw.
+#' @param nodes The node lists, from [completeNodes()].
 #' @keywords internal
 discrepancyCalculatorNF <- nimbleFunction(
-  setup = function(model, discs, dataNodes, simNodes, paramNodes) {
+  setup = function(model, discs, nodes) {
 
-    ## SP: we get dependencies of parameters because we call calculate after changing values
-    ## of the model parameters. self=FALSE to avoid overriding of deterministic nodes
-    ## (e.g. user monitoring sigma (deterministic) instead of log_sigma (stochastic))
-    paramDeps <- model$getDependencies(paramNodes, self = FALSE)
-    ## After simulating a replicate: the data's own densities and anything below.
-    dataDeps  <- model$getDependencies(dataNodes, self = TRUE)
-    restoreDeps <- model$topologicallySortNodes(unique(c(paramDeps, dataDeps)))
+    paramNodes <- nodes$params
+    dataNodes  <- nodes$data
+    simNodes   <- nodes$simulate
+    paramDeps  <- nodes$paramDeps
+
+    ## mvSaved contains the state of the model (nodes values and logProbs etc. )
+    ## Only the nodes changes in the run part are saved. These are parameters,
+    ## their dependencies, and what we resimulate (see completeNodes()).
+    ## Restoring is a copy back rather than a recalculation.
+    savedNodes <- nodes$saved
+    mvSaved    <- modelValues(model)
 
     discList <- nimbleFunctionList(discrepancyBase)
     for (i in seq_along(discs)) {
@@ -234,10 +229,8 @@ discrepancyCalculatorNF <- nimbleFunction(
     ## replicated one.
     results <- array(0, c(nDraws, K, 2))
 
-    ## SP: we need to leave the model as we found it. Saving once here is
-    ## enough, because every draw overwrites these before reading them.
-    savedData   <- values(model, dataNodes)
-    savedParams <- values(model, paramNodes)
+    ## SP: we need to leave the model as we found it before running the calculations
+    nimCopy(from = model, to = mvSaved, row = 1, nodes = savedNodes, logProb = TRUE)
 
     for (i in 1:nDraws) {
       values(model, paramNodes) <<- MCMCOutput[i, ]
@@ -247,14 +240,12 @@ discrepancyCalculatorNF <- nimbleFunction(
       for (k in 1:K) results[i, k, 1] <- discList[[k]]$run()
 
       model$simulate(simNodes, includeData = TRUE)
-      model$calculate(dataDeps)
+      model$calculate(simNodes)
 
       for (k in 1:K) results[i, k, 2] <- discList[[k]]$run()
     }
 
-    values(model, dataNodes)  <<- savedData
-    values(model, paramNodes) <<- savedParams
-    model$calculate(restoreDeps)
+    nimCopy(from = mvSaved, to = model, row = 1, nodes = savedNodes, logProb = TRUE)
 
     returnType(double(3))
     return(results)

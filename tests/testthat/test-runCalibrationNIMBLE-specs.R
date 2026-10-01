@@ -100,8 +100,8 @@ test_that("runCalibrationNIMBLE() runs from specifications alone", {
 test_that("makeSimulateNewDataFun() simulates one replicate of the right size", {
   model <- makeSpecTestModel()
 
-  simFun <- makeSimulateNewDataFun(model$newModel(), simulation("conditional"),
-                                   paramNodes = "mu")
+  simFun <- makeSimulateNewDataFun(model$newModel(),
+                                   completeNodes(model, paramNodes = "mu"))
 
   set.seed(1)
   rep1 <- simFun(c(mu = 100))
@@ -128,8 +128,8 @@ test_that("makeSimulateNewDataFun() uses a derived parameter as drawn", {
   model <- nimbleModel(code, constants = list(n = 200), data = list(y = rep(0, 200)),
                        inits = list(mu = 0, log_sigma = 0))   # sigma = 1
 
-  simFun <- makeSimulateNewDataFun(model$newModel(), simulation("conditional"),
-                                   paramNodes = c("mu", "sigma"))
+  simFun <- makeSimulateNewDataFun(model$newModel(),
+                                   completeNodes(model, paramNodes = c("mu", "sigma")))
 
   set.seed(1)
   rep <- simFun(c(mu = 0, sigma = 10))

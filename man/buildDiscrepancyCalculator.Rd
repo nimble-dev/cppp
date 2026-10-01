@@ -4,17 +4,14 @@
 \alias{buildDiscrepancyCalculator}
 \title{Build the calculator without compiling}
 \usage{
-buildDiscrepancyCalculator(model, discrepancies, simulation, paramNodes)
+buildDiscrepancyCalculator(model, discrepancies, nodes)
 }
 \arguments{
 \item{model}{An uncompiled NIMBLE model.}
 
 \item{discrepancies}{A \code{\link[=discrepancy]{discrepancy()}} specification, or a list of them.}
 
-\item{simulation}{A \code{\link[=simulation]{simulation()}} specification.}
-
-\item{paramNodes}{Character vector naming the model nodes to set from each
-posterior draw.}
+\item{nodes}{The node lists, from \code{\link[=completeNodes]{completeNodes()}}.}
 }
 \value{
 A list with the nimbleFunction \code{calcNF}, the expanded \code{paramNodes},
