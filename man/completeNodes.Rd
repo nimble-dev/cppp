@@ -21,7 +21,7 @@ posterior draw. If \code{NULL}, all stochastic nodes that are not data.}
 \value{
 A list of class \code{cppp_nodes} with
 \itemize{
-\item \code{data}: the observed nodes, one entry per value.
+\item \code{data}: the  nodes, one entry per value.
 \item \code{params}: the nodes set from each draw, one entry per value.
 \item \code{simulate}: the nodes redrawn for a replicate, in model order.
 \item \code{paramDeps}: the nodes to recalculate after setting a draw.
@@ -30,8 +30,8 @@ back when it is done.
 }
 }
 \description{
-Every node list the package needs, worked out once from what the user gave
-and the model. The calculator, the simulate function and the MCMC all take
+This function groups the model nodes the packagage needs for the entire cppp
+procedure. The calculator, the simulate function and the MCMC all take
 their nodes from here.
 }
 \keyword{internal}

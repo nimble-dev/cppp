@@ -192,9 +192,9 @@ runCalibrationNIMBLE <- function(
     ## functions
     disc = list(
       model      = model,
-      dataNames  = dataNames,
+      dataNames  = if (is.null(dataNames)) nodes$data else dataNames,
       dataNodes  = dataNodes,
-      paramNames = paramNames,
+      paramNames = if (is.null(paramNames)) nodes$params else paramNames,
       paramNodes = paramNodes
     ),
     draw = list()
